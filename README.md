@@ -17,7 +17,6 @@ git clone <this repo> && cd secure_ai_agent_platform
 cp secrets.env.example secrets.env   # fill real values, chmod 600
 docker-compose up -d
 ```
-App on :7861 behind nginx (langflow2.sorokinonline.com).
 
 ## Build
 ```

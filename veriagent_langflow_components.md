@@ -18,9 +18,9 @@ Guard'ы **advisory**: выдают `Verdict` (Data) и опционально �
   (пересборка образа НЕ нужна).
 - env в compose: `LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY=true`, `VERIAGENT_JUDGE_URL`,
   `VERIAGENT_JUDGE_MODEL`, `VERIAGENT_JUDGE_KEY`, `VERIAGENT_SIGNING_KEY`.
-- Судья (122B) доступен из контейнера по `https://chat.sorokinonline.com/v1/chat/completions`.
+- Судья (122B) доступен из контейнера по `https://<judge-host>/v1/chat/completions`.
 - Стор: postgres-сервис `langflow-v2-postgres`, DSN в env `LANGFLOW_DATABASE_URL`.
-- Тестовая страница с инъекцией: `https://langflow2.sorokinonline.com/verai-test/`
+- Тестовая страница с инъекцией: `https://<app-host>/verai-test/`
   (nginx `location /verai-test/` → `/home/sorokin/verai-test/`; конфиг langflow2 забэкаплен).
 
 ## 1. VeriAgent Input Guard (`veriagent_input_guard.py`)
@@ -80,4 +80,4 @@ Pubkey в строке → каждая расписка самопроверя�
 - Input Guard: clean→CLEAN, inj→SUSPECT (regex + judge).
 - Tool Guard: обёртка URL/даты/калькулятора; на вызове — расписка с `run_id`, подпись валидна.
 - Grounding Guard (receipts): `verified=1`, баннеры «галлюцинации» / «атака через инструмент»
-  (тест: `https://langflow2.sorokinonline.com/verai-test/` → flags `override_phrase,special_token`).
+  (тест: `https://<app-host>/verai-test/` → flags `override_phrase,special_token`).
