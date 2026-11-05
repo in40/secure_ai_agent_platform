@@ -1,64 +1,65 @@
-version: "3.8"
-
+version: '3.8'
 services:
   langflow:
     image: langflow-v2-docling:1.0.17
     env_file:
-      - secrets.env
+    - secrets.env
     container_name: langflow-v2
     ports:
-      - "7861:7860"
+    - 7861:7860
     environment:
-      - LANGFLOW_HOST=0.0.0.0
-      - LANGFLOW_PORT=7860
-      - LANGFLOW_WORKERS=4
-      - LANGFLOW_CONFIG_DIR=/app/langflow
-      - LANGFLOW_AUTO_LOGIN=False
-      - LANGFLOW_SUPERUSER=sorokin
-      - LANGFLOW_NEW_USER_IS_ACTIVE=False
-      - LANGFLOW_SSRF_ALLOWED_HOSTS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
-      - LANGFLOW_RATE_LIMIT_ENABLED=False
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://openobserve:5080/api/default
-      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-      - OTEL_SERVICE_NAME=langflow-v2
-      - OTEL_EXPORTER_OTLP_TIMEOUT=30000
-      - OTEL_PYTHON_LOG_CORRELATION=true
-      - OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic YWRtaW5AZXhhbXBsZS5jb206T3Blbk9icyEyMDI2
-      - LANGFLOW_DANGEROUSLY_ALLOW_MULTI_WORKER_WITHOUT_SHARED_QUEUE=true
-      - LANGFLOW_OTEL_LOG_BODIES=all
-      - LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY=true
-      - VERIAGENT_JUDGE_URL=https://chat.sorokinonline.com/v1/chat/completions
-      - VERIAGENT_JUDGE_MODEL=qwen3.5-122b
+    - LANGFLOW_HOST=0.0.0.0
+    - LANGFLOW_PORT=7860
+    - LANGFLOW_WORKERS=4
+    - LANGFLOW_CONFIG_DIR=/app/langflow
+    - LANGFLOW_AUTO_LOGIN=False
+    - LANGFLOW_SUPERUSER=sorokin
+    - LANGFLOW_NEW_USER_IS_ACTIVE=False
+    - LANGFLOW_SSRF_ALLOWED_HOSTS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    - LANGFLOW_RATE_LIMIT_ENABLED=False
+    - OTEL_EXPORTER_OTLP_ENDPOINT=http://openobserve:5080/api/default
+    - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+    - OTEL_SERVICE_NAME=langflow-v2
+    - OTEL_EXPORTER_OTLP_TIMEOUT=30000
+    - OTEL_PYTHON_LOG_CORRELATION=true
+    - OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic YWRtaW5AZXhhbXBsZS5jb206T3Blbk9icyEyMDI2
+    - LANGFLOW_DANGEROUSLY_ALLOW_MULTI_WORKER_WITHOUT_SHARED_QUEUE=true
+    - LANGFLOW_OTEL_LOG_BODIES=all
+    - LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY=true
+    - VERIAGENT_JUDGE_URL=https://chat.sorokinonline.com/v1/chat/completions
+    - VERIAGENT_JUDGE_MODEL=qwen3.5-122b
     volumes:
-      - ./langflow-data:/app/langflow
-      - ./custom_components:/app/custom_components
+    - ./langflow-data:/app/langflow
+    - ./custom_components:/app/custom_components
     depends_on:
       postgres:
         condition: service_healthy
     networks:
-      - langflow-v2_default
+    - langflow-v2_default
+    - docling_default
     restart: unless-stopped
-
   postgres:
     image: postgres:16
     container_name: langflow-v2-postgres
     env_file:
-      - secrets.env
+    - secrets.env
     environment:
-      - POSTGRES_USER=langflow
-      - POSTGRES_DB=langflow
+    - POSTGRES_USER=langflow
+    - POSTGRES_DB=langflow
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+    - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U langflow -d langflow"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U langflow -d langflow
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
-
 networks:
   langflow-v2_default:
     external: true
-
+  docling_default:
+    external: true
 volumes:
-  postgres-data:
+  postgres-data: null
