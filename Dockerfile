@@ -30,3 +30,10 @@ ENV LANGFLOW_COMPONENTS_PATH=/app/custom_components
 
 # EasyOCR models (craft detection + recognition incl. cyrillic) for offline OCR
 COPY --chown=1000:0 easyocr_models/ /app/data/.cache/docling/models/EasyOcr/
+
+# tesserocr language data (eng/rus/ukr, tessdata_fast)
+COPY tessdata/ /usr/share/tessdata/
+ENV TESSDATA_PREFIX=/usr/share/tessdata
+
+# startup pre-imports: avoid openai import-lock deadlock in docling child procs
+COPY sitecustomize.py /app/.venv/lib/python3.14/site-packages/sitecustomize.py
