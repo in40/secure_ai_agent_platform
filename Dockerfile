@@ -11,7 +11,7 @@ RUN microdnf install -y --setopt=install_weak_deps=0 \
 USER user
 
 RUN uv pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
-RUN uv pip install "lfx-docling[local]" "python-calamine" "lfx-bundles" neo4j pdfplumber
+RUN uv pip install "lfx-docling[local]" "python-calamine" "lfx-bundles" neo4j pdfplumber easyocr
 
 COPY patched_file.py /app/.venv/lib/python3.14/site-packages/lfx/components/files_and_knowledge/file.py
 COPY patched_tracing.py /app/.venv/lib/python3.14/site-packages/lfx/services/tracing/service.py
@@ -27,3 +27,6 @@ EXPOSE 7860
 # Custom components
 COPY pdfplumber_component.py /app/custom_components/pdfplumber_component.py
 ENV LANGFLOW_COMPONENTS_PATH=/app/custom_components
+
+# EasyOCR models (craft detection + recognition incl. cyrillic) for offline OCR
+COPY --chown=1000:0 easyocr_models/ /app/data/.cache/docling/models/EasyOcr/

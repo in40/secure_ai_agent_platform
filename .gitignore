@@ -6,3 +6,4 @@ langflow-data/
 *.tar.gz
 __pycache__/
 sitecustomize.py
+easyocr_models/
