@@ -38,3 +38,4 @@ ENV TESSDATA_PREFIX=/usr/share/tessdata
 # startup pre-imports: avoid openai import-lock deadlock in docling child procs
 COPY sitecustomize.py /app/.venv/lib/python3.14/site-packages/sitecustomize.py
 COPY patched_docling_inline.py /app/.venv/lib/python3.14/site-packages/lfx_docling/components/docling/docling_inline.py
+COPY patched_qdrant_bundle.py /app/.venv/lib/python3.14/site-packages/lfx_bundles/qdrant/qdrant.py
