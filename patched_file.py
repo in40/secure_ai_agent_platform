@@ -1166,6 +1166,10 @@ class FileComponent(BaseFileComponent):
                                 pipe.do_ocr = True
                                 fac = get_ocr_factory(allow_external_plugins=False)
                                 pipe.ocr_options = fac.create_options(kind=ocr_engine)
+                                if ocr_engine == "tesserocr":
+                                    pipe.ocr_options.lang = ["eng", "rus"]
+                                elif ocr_engine == "easyocr":
+                                    pipe.ocr_options.lang = ["en", "ru"]
                             except Exception:
                                 # If OCR setup fails, disable it
                                 pipe.do_ocr = False
