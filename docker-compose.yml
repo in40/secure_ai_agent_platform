@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   langflow:
-    image: langflow-v2-docling:1.0.20
+    image: langflow-v2-docling:1.0.21
     env_file:
     - secrets.env
     container_name: langflow-v2
