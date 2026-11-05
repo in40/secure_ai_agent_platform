@@ -53,9 +53,13 @@ class QdrantVectorStoreComponent(LCVectorStoreComponent):
 
     @check_cached_vector_store
     def build_vector_store(self) -> QdrantVectorStore:
-        from lfx.services.tracing.service import trace_context_var as _tc_var
-        _tc = _tc_var.get(None)
-        _sid = (getattr(self, "session_id", "") or "").strip() or (getattr(_tc, "session_id", "") if _tc else "")
+        try:
+            from langflow.services.tracing.service import trace_context_var as _tc_var
+            _tc = _tc_var.get(None)
+            _tc_sid = getattr(_tc, "session_id", "") if _tc else ""
+        except Exception:
+            _tc_sid = ""
+        _sid = (getattr(self, "session_id", "") or "").strip() or _tc_sid
         _coll = f"{self.collection_name}-{_sid}" if _sid else self.collection_name
 
         qdrant_kwargs = {
