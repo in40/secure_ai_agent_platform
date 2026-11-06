@@ -20,10 +20,13 @@ docker-compose up -d
 
 ## Build
 ```
-docker build -t langflow-v2-docling:1.0.27 .
+docker build -t langflow-v2-docling:1.0.28 .
 ```
 
 ## Notes
 - Docling runs CPU-only (torch 2.15+cpu); image ~7GB.
 - VeriAgent guards are advisory (no block) — enforcement is caller-side.
 - `LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY=true` — only superuser may create components.
+
+## Flattened builds
+Builds 1.0.28+ are single-layer (docker export|docker import via flatten.sh + gen_changes.py) so removed files (node, old pillow/certifi, faker uk_UA) are absent from ALL image blobs for composition scanners. Rebuild: docker build as usual, then bash flatten.sh.
