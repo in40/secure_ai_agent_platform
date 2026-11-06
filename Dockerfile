@@ -13,6 +13,12 @@ USER user
 RUN uv pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
 RUN uv pip install "lfx-docling[local,image-description]" "python-calamine" "lfx-bundles" neo4j pdfplumber easyocr && rm -rf /app/.venv/lib/python3.14/site-packages/faker/providers/*/uk_UA /app/data/.cache/uv/archive-v0/*/faker/providers/*/uk_UA
 
+# Infosec: pillow>=13 (CVE-2026-112403/112398/112900/96639), certifi>=2026.10.19 (emSign CA), drop node runtime (CVE-2026-112393)
+RUN uv pip install -U "pillow>=13.0.0" "certifi>=2026.10.19"
+USER root
+RUN rm -f /usr/local/bin/node
+USER user
+
 COPY patched_file.py /app/.venv/lib/python3.14/site-packages/lfx/components/files_and_knowledge/file.py
 COPY patched_tracing.py /app/.venv/lib/python3.14/site-packages/lfx/services/tracing/service.py
 
