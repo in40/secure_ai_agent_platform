@@ -31,7 +31,6 @@ services:
     - VERIAGENT_JUDGE_MODEL=qwen3.5-122b
     volumes:
     - ./langflow-data:/app/langflow
-    - ./custom_components:/app/custom_components
     depends_on:
       postgres:
         condition: service_healthy

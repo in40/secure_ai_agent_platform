@@ -31,7 +31,7 @@ ENV HF_HOME=/app/data/.cache/huggingface
 EXPOSE 7860
 
 # Custom components
-COPY pdfplumber_component.py /app/custom_components/pdfplumber_component.py
+COPY custom_components/ /app/custom_components/
 ENV LANGFLOW_COMPONENTS_PATH=/app/custom_components
 
 # EasyOCR models (craft detection + recognition incl. cyrillic) for offline OCR

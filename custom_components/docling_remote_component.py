@@ -148,7 +148,8 @@ class DoclingRemoteComponent(Component):
         # Read file path from context - need to figure out how Langflow passes files
         # Check if self has input_files or similar
         file_path = None
-        for attr in ["input_files", "file", "input_file", "path"]:            val = getattr(self, attr, None)
+        for attr in ["input_files", "file", "input_file", "path"]:
+            val = getattr(self, attr, None)
             if val:
                 if isinstance(val, list) and len(val) > 0:
                     val = val[0]
