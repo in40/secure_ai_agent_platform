@@ -9,7 +9,7 @@ import re
 import requests
 
 from langflow.custom import Component
-from langflow.io import BoolInput, MessageTextInput, Output
+from langflow.io import StrInput, BoolInput, MessageTextInput, Output
 from langflow.schema import Data
 from langflow.schema.message import Message
 
@@ -41,6 +41,7 @@ class VeriAgentInputGuard(Component):
         MessageTextInput(name="text", display_name="Text to guard", required=True),
         BoolInput(name="use_regex", display_name="Regex scan (cheap)", value=True),
         BoolInput(name="use_judge", display_name="122B judge (semantic)", value=False),
+StrInput(name="judge_url", display_name="Judge URL", info="OpenAI-compatible judge endpoint; empty = env VERIAGENT_JUDGE_URL", value=""),
     ]
 
     outputs = [
@@ -62,7 +63,7 @@ class VeriAgentInputGuard(Component):
         return flags
 
     def _judge(self, text: str) -> str:
-        url = os.environ.get("VERIAGENT_JUDGE_URL", "https://chat.sorokinonline.com/v1/chat/completions")
+        url = (getattr(self, "judge_url", "") or "").strip() or os.environ.get("VERIAGENT_JUDGE_URL", "https://chat.sorokinonline.com/v1/chat/completions")
         key = os.environ.get("VERIAGENT_JUDGE_KEY", "")
         try:
             r = requests.post(url, headers={"Authorization": "Bearer " + key},

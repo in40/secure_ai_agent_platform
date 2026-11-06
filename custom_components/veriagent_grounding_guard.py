@@ -15,7 +15,7 @@ import base64
 import requests
 
 from langflow.custom import Component
-from langflow.io import BoolInput, MessageTextInput, Output
+from langflow.io import StrInput, BoolInput, MessageTextInput, Output
 from langflow.schema import Data
 from langflow.schema.message import Message
 
@@ -40,6 +40,7 @@ class VeriAgentGroundingGuard(Component):
         MessageTextInput(name="answer", display_name="LLM answer", required=True),
         MessageTextInput(name="context", display_name="Retrieved sources", is_list=True),
         BoolInput(name="use_judge", display_name="122B judge (semantic)", value=True),
+StrInput(name="judge_url", display_name="Judge URL", info="OpenAI-compatible judge endpoint; empty = env VERIAGENT_JUDGE_URL", value=""),
         BoolInput(name="use_overlap", display_name="Lexical overlap (cheap)", value=True),
         BoolInput(name="use_receipts", display_name="Sources = signed receipts (this run)", value=False),
         BoolInput(name="inject_warning", display_name="Inject warning into answer", value=True),
@@ -58,7 +59,7 @@ class VeriAgentGroundingGuard(Component):
         return len(cw & sw) / len(cw)
 
     def _judge(self, claim, src):
-        url = os.environ.get("VERIAGENT_JUDGE_URL", "https://chat.sorokinonline.com/v1/chat/completions")
+        url = (getattr(self, "judge_url", "") or "").strip() or os.environ.get("VERIAGENT_JUDGE_URL", "https://chat.sorokinonline.com/v1/chat/completions")
         key = os.environ.get("VERIAGENT_JUDGE_KEY", "")
         try:
             r = requests.post(url, headers={"Authorization": "Bearer " + key},
