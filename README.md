@@ -20,7 +20,7 @@ docker-compose up -d
 
 ## Build
 ```
-docker build -t langflow-v2-docling:1.0.24 .
+docker build -t langflow-v2-docling:1.0.25 .
 ```
 
 ## Notes

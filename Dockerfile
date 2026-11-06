@@ -11,7 +11,7 @@ RUN microdnf install -y --setopt=install_weak_deps=0 \
 USER user
 
 RUN uv pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
-RUN uv pip install "lfx-docling[local,image-description]" "python-calamine" "lfx-bundles" neo4j pdfplumber easyocr
+RUN uv pip install "lfx-docling[local,image-description]" "python-calamine" "lfx-bundles" neo4j pdfplumber easyocr && rm -rf /app/.venv/lib/python3.14/site-packages/faker/providers/bank/uk_UA /app/data/.cache/uv/archive-v0/*/faker/providers/bank/uk_UA
 
 COPY patched_file.py /app/.venv/lib/python3.14/site-packages/lfx/components/files_and_knowledge/file.py
 COPY patched_tracing.py /app/.venv/lib/python3.14/site-packages/lfx/services/tracing/service.py
