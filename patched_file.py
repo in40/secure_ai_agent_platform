@@ -1178,6 +1178,9 @@ class FileComponent(BaseFileComponent):
                                     pipe.ocr_options.lang = ["eng", "rus"]
                                 elif ocr_engine == "easyocr":
                                     pipe.ocr_options.lang = ["en", "ru"]
+                                    from pathlib import Path as _P
+                                    pipe.ocr_options.model_storage_directory = str(_P.home() / ".cache" / "docling" / "models" / "EasyOcr")
+                                    pipe.ocr_options.download_enabled = False
                             except Exception as e:
                                 # If OCR setup fails, disable it
                                 _log("ocr_setup_failed", engine=ocr_engine, error=str(e))

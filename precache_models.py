@@ -28,6 +28,7 @@ from huggingface_hub import snapshot_download  # noqa: E402
 REPOS = [
     "docling-project/docling-layout-heron",
     "docling-project/docling-models",
+    "docling-project/DocumentFigureClassifier-v2.5",
 ]
 
 for repo in REPOS:
