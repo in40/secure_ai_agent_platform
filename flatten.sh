@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
-SRC=langflow-v2-docling:1.0.27
-DST=langflow-v2-docling:1.0.28
+SRC=${1:-langflow-v2-docling:1.0.29-rc}
+DST=${2:-langflow-v2-docling:1.0.29}
 
 mapfile -t ARGS < <(docker inspect -f '{{json .Config}}' "$SRC" | python3 /tmp/gen_changes.py)
 echo "changes: ${#ARGS[@]} args"

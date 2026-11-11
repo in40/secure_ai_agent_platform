@@ -1,170 +1,196 @@
-import base64
 import time
-from typing import Any
+from pathlib import Path
 
 import httpx
 
 from langflow.custom import Component
-from langflow.io import DropdownInput, FloatInput, StrInput, Output
+from langflow.io import (
+    BoolInput,
+    DropdownInput,
+    FileInput,
+    FloatInput,
+    StrInput,
+    Output,
+)
 from langflow.schema import Data
 
 
 class DoclingRemoteComponent(Component):
     display_name = "Docling Remote"
-    description = "Extract structured data from documents via remote Docling Serve API."
+    description = "Convert documents via remote Docling Serve (OCR engines, picture classification, scale)."
     icon = "file-text"
     name = "DoclingRemote"
 
     inputs = [
+        FileInput(
+            name="input_files",
+            display_name="Documents",
+            info="Files to send to Docling Serve.",
+            file_types=["pdf", "docx", "pptx", "xlsx", "png", "jpg", "jpeg", "tiff", "bmp", "html", "md"],
+            is_list=True,
+            required=True,
+        ),
         StrInput(
             name="base_url",
             display_name="Docling Serve URL",
-            info="Base URL of Docling Serve, e.g. http://docling-serve-gpu-2:5001",
-            value="http://docling-serve-gpu-2:5001",
+            info="Base URL, e.g. http://docling-serve:5001",
+            value="http://docling-serve:5001",
             required=True,
-            tool=False,
+            tool_mode=False,
         ),
         StrInput(
             name="api_key",
             display_name="API Key (optional)",
-            info="Bearer token for authentication, leave empty if not required.",
+            info="Bearer token, empty if not required.",
             value="",
-            password=False,
-            tool=False,
+            tool_mode=False,
+        ),
+        DropdownInput(
+            name="ocr_engine",
+            display_name="OCR Engine",
+            info="OCR engine on the server side.",
+            options=["auto", "easyocr", "tesseract", "rapidocr"],
+            value="easyocr",
+            tool_mode=False,
+        ),
+        StrInput(
+            name="ocr_lang",
+            display_name="OCR Languages",
+            info="Comma-separated easyocr codes, e.g. en,ru",
+            value="en,ru",
+            tool_mode=False,
+        ),
+        FloatInput(
+            name="images_scale",
+            display_name="Images Scale (dpi/72)",
+            info="Page rasterization scale. 2.0 (~144dpi) fits 8GB; 3.0 (~216dpi) needs ~10GB with easyocr.",
+            value=2.0,
+            tool_mode=False,
+        ),
+        BoolInput(
+            name="do_picture_classification",
+            display_name="Picture Classification",
+            info="Enable figure classification stage.",
+            value=False,
+            tool_mode=False,
+        ),
+        BoolInput(
+            name="force_ocr",
+            display_name="Force OCR",
+            info="Run OCR even when a text layer exists.",
+            value=False,
+            tool_mode=False,
         ),
         DropdownInput(
             name="output_format",
             display_name="Output Format",
-            info="Format of extracted content.",
-            options=["markdown", "json", "text"],
+            info="Text output format (Docling JSON output is always available).",
+            options=["markdown", "text"],
             value="markdown",
-            tool=False,
-        ),
-        FloatInput(
-            name="poll_interval",
-            display_name="Poll Interval (sec)",
-            info="Seconds between status polls.",
-            value=2.0,
-            tool=False,
+            tool_mode=False,
         ),
         FloatInput(
             name="max_wait",
             display_name="Max Wait (sec)",
-            info="Maximum time to wait for processing.",
-            value=120.0,
-            tool=False,
+            info="Maximum time to wait per document.",
+            value=900.0,
+            tool_mode=False,
         ),
     ]
 
     outputs = [
-        Output(display_name="Data", name="data", method="build_output"),
+        Output(display_name="Text", name="text_out", method="build_text", group_outputs=True),
+        Output(display_name="Docling JSON", name="doc_json", method="build_doc_json", group_outputs=True),
     ]
 
-    def _get_headers(self) -> dict:
-        headers = {"Content-Type": "application/json"}
+    def _resolve_paths(self) -> list[str]:
+        files = self.input_files
+        if not isinstance(files, list):
+            files = [files]
+        paths = []
+        for item in files:
+            if isinstance(item, Data):
+                p = item.data.get("file_path") or item.data.get("path")
+            else:
+                p = str(item)
+            if p:
+                paths.append(str(p))
+        if not paths:
+            msg = "DoclingRemote: no input files resolved"
+            raise ValueError(msg)
+        return paths
+
+    def _convert(self, path: str) -> dict:
+        base_url = (getattr(self, "base_url", "") or "").rstrip("/")
+        headers = {}
         api_key = getattr(self, "api_key", "") or ""
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        return headers
 
-    def _upload_and_wait(self, file_path: str, headers: dict, base_url: str, output_format: str, poll_interval: float, max_wait: float):
-        c = httpx.Client(timeout=max_wait + 10)
+        langs = [x.strip() for x in (getattr(self, "ocr_lang", "") or "").split(",") if x.strip()]
+        data = {
+            "do_ocr": "true",
+            "force_ocr": "true" if getattr(self, "force_ocr", False) else "false",
+            "ocr_engine": getattr(self, "ocr_engine", "easyocr"),
+            "images_scale": str(getattr(self, "images_scale", 2.0)),
+            "do_picture_classification": "true" if getattr(self, "do_picture_classification", False) else "false",
+            "to_formats": ["md", "json"],
+            "ocr_lang": langs,
+        }
+
+        max_wait = float(getattr(self, "max_wait", 900.0))
+        c = httpx.Client(timeout=60.0, headers=headers)
         try:
-            with open(file_path, "rb") as f:
-                content = f.read()
-            b64 = base64.b64encode(content).decode()
-            fname = file_path.split("/")[-1] if "/" in file_path else file_path
-
-            r = c.post(
-                f"{base_url}/v1/convert/source/async",
-                headers=headers,
-                json={
-                    "options": {"to_formats": ["json"]},
-                    "sources": [{"kind": "file", "base64_string": b64, "filename": fname}],
-                },
-            )
+            with open(path, "rb") as f:
+                r = c.post(
+                    f"{base_url}/v1/convert/file/async",
+                    files={"files": (Path(path).name, f)},
+                    data=data,
+                )
             if r.status_code != 200:
-                self.status = f"Upload failed: {r.status_code} {r.text[:200]}"
-                return None
+                msg = f"DoclingRemote submit failed: {r.status_code} {r.text[:300]}"
+                raise ValueError(msg)
             task_id = r.json().get("task_id")
             if not task_id:
-                self.status = "No task_id in response"
-                return None
+                msg = f"DoclingRemote: no task_id in {r.text[:200]}"
+                raise ValueError(msg)
 
             deadline = time.time() + max_wait
             while time.time() < deadline:
+                time.sleep(5)
                 sr = c.get(f"{base_url}/v1/status/poll/{task_id}")
-                d = sr.json()
-                st = d.get("task_status", "")
-                if st in ("success", "COMPLETED", "done"):
+                st = sr.json().get("task_status", "")
+                if st == "success":
                     rr = c.get(f"{base_url}/v1/result/{task_id}")
-                    if rr.status_code == 200:
-                        return rr.json()
-                    return None
-                elif st in ("failed", "FAILURE", "error"):
-                    self.status = f"Job failed: {sr.text[:200]}"
-                    return None
-                time.sleep(poll_interval)
-            self.status = "Timeout waiting for result"
-            return None
+                    if rr.status_code != 200:
+                        msg = f"DoclingRemote result fetch failed: {rr.status_code} {rr.text[:200]}"
+                        raise ValueError(msg)
+                    return rr.json().get("document", {})
+                if st == "failure":
+                    msg = f"DoclingRemote job failed on server: {sr.text[:300]}"
+                    raise ValueError(msg)
+            msg = f"DoclingRemote timed out after {max_wait}s"
+            raise ValueError(msg)
         finally:
             c.close()
 
-    def _format_result(self, result: dict, output_format: str) -> str:
-        doc = result.get("document", {})
-        jc = doc.get("json_content", {})
-        if output_format == "json":
-            return str(jc)
-        if output_format == "text":
-            texts = jc.get("texts", [])
-            return "\n\n".join(t.get("text", "") for t in texts if t.get("text"))
-        # markdown (default)
-        md_content = doc.get("md_content")
-        if md_content:
-            return md_content
-        # Build markdown from json_content
-        texts = jc.get("texts", [])
-        parts = []
-        for t in texts:
-            label = t.get("label", "text")
-            text = t.get("text", "")
-            if label == "title":
-                parts.append(f"# {text}")
-            elif label == "section_header":
-                parts.append(f"## {text}")
-            elif label == "subtitle_text":
-                parts.append(f"### {text}")
-            else:
-                parts.append(text)
-        return "\n\n".join(parts)
+    def _all_docs(self) -> list[dict]:
+        if not hasattr(self, "_cached_docs"):
+            self._cached_docs = [self._convert(p) for p in self._resolve_paths()]
+        return self._cached_docs
 
-    def build_output(self) -> list[Data]:
-        base_url = getattr(self, "base_url", "http://docling-serve-gpu-2:5001")
-        if not base_url.endswith("/"):
-            base_url = base_url + "/"
-        output_format = getattr(self, "output_format", "markdown")
-        poll_interval = float(getattr(self, "poll_interval", 2.0))
-        max_wait = float(getattr(self, "max_wait", 120.0))
-        # Read file path from context - need to figure out how Langflow passes files
-        # Check if self has input_files or similar
-        file_path = None
-        for attr in ["input_files", "file", "input_file", "path"]:
-            val = getattr(self, attr, None)
-            if val:
-                if isinstance(val, list) and len(val) > 0:
-                    val = val[0]
-                if isinstance(val, Data):
-                    file_path = val.data.get("file_path") or val.data.get("path")
-                else:
-                    file_path = str(val)
-                break
-        if not file_path:
-            msg = "No input file provided"
-            raise ValueError(msg)
-        headers = self._get_headers()
-        result = self._upload_and_wait(file_path, headers, base_url, output_format, poll_interval, max_wait)
-        if result is None:
-            raise ValueError(self.status or "Unknown error")
-        text = self._format_result(result, output_format)
-        self.status = "Document processed successfully"
-        return [Data(data={"raw": result, "text": text, "filename": file_path})]
+    def _doc_text(self, doc: dict) -> str:
+        if getattr(self, "output_format", "markdown") == "markdown":
+            return doc.get("md_content") or ""
+        jc = doc.get("json_content") or {}
+        return "\n\n".join(t.get("text", "") for t in jc.get("texts", []) if t.get("text"))
+
+    def build_text(self) -> str:
+        docs = self._all_docs()
+        self.status = f"{len(docs)} document(s) processed"
+        return "\n\n---\n\n".join(self._doc_text(d) for d in docs)
+
+    def build_doc_json(self) -> list[Data]:
+        docs = self._all_docs()
+        self.status = f"{len(docs)} document(s) processed"
+        return [Data(data={"doc": d.get("json_content", {}), "filename": d.get("filename", "")}) for d in docs]

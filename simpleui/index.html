@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flow Runner</title>
+<style>
+  :root { --bg:#111418; --panel:#1b1f26; --border:#2c333d; --text:#e6e9ee; --muted:#8b95a3; --accent:#4f8cff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; }
+  header { padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--border); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0 12px 0 0; }
+  select,input,button { background:#232932; color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 10px; font:inherit; }
+  button { cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  #chat { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:80%; padding:10px 14px; border-radius:12px; white-space:pre-wrap; word-break:break-word; }
+  .user { align-self:flex-end; background:var(--accent); color:#fff; }
+  .bot  { align-self:flex-start; background:var(--panel); border:1px solid var(--border); }
+  .err  { align-self:center; color:#ff7b72; font-size:13px; }
+  .meta { align-self:center; color:var(--muted); font-size:12px; }
+  footer { display:flex; gap:8px; padding:12px 16px; background:var(--panel); border-top:1px solid var(--border); }
+  #prompt { flex:1; resize:none; min-height:42px; max-height:160px; }
+  .hint { color:var(--muted); font-size:12px; }
+  #apikey { width:230px; }
+  #session { width:150px; }
+  #flow { max-width:260px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>▶ Flow Runner</h1>
+  <select id="flow" title="Flow"><option value="">— flow —</option></select>
+  <input id="session" placeholder="session id">
+  <input id="apikey" type="password" placeholder="API key (sk-...)">
+  <button id="loginBtn" title="Войти для списка flow'ов">🔑</button>
+  <button id="clearBtn" title="Очистить чат">🗑</button>
+</header>
+<div id="chat"><div class="meta">Выберите flow, введите API-ключ (Langflow → Settings → API Keys) и напишите сообщение.</div></div>
+<footer>
+  <textarea id="prompt" placeholder="Сообщение... (Enter — отправить, Shift+Enter — перенос)"></textarea>
+  <button id="sendBtn">Отправить</button>
+</footer>
+<div style="display:none" id="loginForm">
+  <div style="padding:8px 16px;background:var(--panel);border-top:1px solid var(--border);display:flex;gap:8px">
+    <input id="user" placeholder="username"><input id="pass" type="password" placeholder="password">
+    <button id="doLogin">Login</button>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const LS = { flow:'sf_flow', session:'sf_session', apikey:'sf_apikey' };
+let jwt = '';
+
+$('apikey').value = localStorage.getItem(LS.apikey) || '';
+$('session').value = localStorage.getItem(LS.session) || ('ui-' + Math.random().toString(36).slice(2, 10));
+localStorage.setItem(LS.session, $('session').value);
+
+function add(cls, text) {
+  const d = document.createElement('div');
+  d.className = cls; d.textContent = text;
+  $('chat').appendChild(d); $('chat').scrollTop = $('chat').scrollHeight;
+  return d;
+}
+
+$('apikey').onchange = () => localStorage.setItem(LS.apikey, $('apikey').value.trim());
+$('session').onchange = () => localStorage.setItem(LS.session, $('session').value.trim());
+$('clearBtn').onclick = () => { $('chat').innerHTML = ''; };
+$('loginBtn').onclick = () => $('loginForm').style.display = $('loginForm').style.display === 'none' ? '' : 'none';
+
+$('doLogin').onclick = async () => {
+  const body = new URLSearchParams({ username: $('user').value, password: $('pass').value });
+  try {
+    const r = await fetch('/api/v1/login', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
+    if (!r.ok) throw new Error('login: ' + r.status);
+    jwt = (await r.json()).access_token;
+    $('loginForm').style.display = 'none';
+    await loadFlows();
+  } catch (e) { add('err', e.message); }
+};
+
+async function loadFlows() {
+  if (!jwt) return;
+  const r = await fetch('/api/v1/flows/?limit=200', { headers:{ Authorization:'Bearer ' + jwt } });
+  if (!r.ok) { add('err', 'flows list: ' + r.status); return; }
+  const flows = await r.json();
+  const sel = $('flow'); const cur = localStorage.getItem(LS.flow) || '';
+  sel.innerHTML = '<option value="">— flow —</option>';
+  flows.sort((a,b)=>(a.name||'').localeCompare(b.name||'')).forEach(f => {
+    const o = document.createElement('option');
+    o.value = f.id; o.textContent = f.name || f.id;
+    sel.appendChild(o);
+  });
+  if (cur) sel.value = cur;
+}
+$('flow').onchange = () => localStorage.setItem(LS.flow, $('flow').value);
+
+function extractOutputs(data) {
+  const parts = [];
+  for (const g of (data.outputs || []))
+    for (const o of (g.outputs || []))
+      if (o.content) parts.push(typeof o.content === 'string' ? o.content : JSON.stringify(o.content));
+  return parts.join('\n\n') || (data.status ?? JSON.stringify(data));
+}
+
+async function send() {
+  const flowId = $('flow').value, key = $('apikey').value.trim();
+  const text = $('prompt').value.trim();
+  if (!flowId) return add('err', 'Выберите flow');
+  if (!key)   return add('err', 'Нужен API-ключ');
+  if (!text)  return;
+  $('prompt').value = '';
+  add('user', text);
+  const thinking = add('bot', '…');
+  try {
+    const r = await fetch(`/api/v1/run/${flowId}`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'x-api-key': key },
+      body: JSON.stringify({ input_value: text, session_id: $('session').value.trim(), input_type:'chat', output_type:'chat' })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { thinking.remove(); add('err', `${r.status}: ${JSON.stringify(data).slice(0,300)}`); return; }
+    thinking.textContent = extractOutputs(data);
+  } catch (e) { thinking.remove(); add('err', String(e)); }
+}
+$('sendBtn').onclick = send;
+$('prompt').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+loadFlows();
+</script>
+</body>
+</html>
