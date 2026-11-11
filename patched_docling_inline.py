@@ -108,6 +108,14 @@ class DoclingInlineComponent(BaseFileComponent):
     # ------------------------------------------------------------------ #
     _CHILD_SCRIPT: str = textwrap.dedent(r"""
         import json, sys
+        import time as _time
+        import resource as _res
+        import traceback as _tb
+
+        def _log(stage, **kw):
+            rss = _res.getrusage(_res.RUSAGE_SELF).ru_maxrss / 1024
+            sys.stderr.write("[docling-child %s] %s rss_mb=%.0f %s\n" % (_time.strftime("%H:%M:%S"), stage, rss, kw))
+            sys.stderr.flush()
 
         def main():
             cfg = json.loads(sys.stdin.read())
@@ -117,6 +125,7 @@ class DoclingInlineComponent(BaseFileComponent):
             do_picture_cls  = cfg["do_picture_classification"]
             pic_desc_config = cfg.get("pic_desc_config")
             pic_desc_prompt = cfg.get("pic_desc_prompt", "")
+            _log("start", pipeline=pipeline, ocr_engine=ocr_engine, picture_cls=do_picture_cls, pic_desc=bool(pic_desc_config), files=len(file_paths))
 
             try:
                 from docling.datamodel.base_models import ConversionStatus, InputFormat
@@ -139,7 +148,8 @@ class DoclingInlineComponent(BaseFileComponent):
                             pipe.ocr_options.lang = ["eng", "rus"]
                         elif ocr_engine == "easyocr":
                             pipe.ocr_options.lang = ["en", "ru"]
-                    except Exception:
+                    except Exception as e:
+                        _log("ocr_setup_failed", engine=ocr_engine, error=str(e))
                         pipe.do_ocr = False
 
                 pipe.do_picture_classification = do_picture_cls
@@ -207,6 +217,7 @@ class DoclingInlineComponent(BaseFileComponent):
                     if hasattr(InputFormat, "IMAGE"):
                         fmt[InputFormat.IMAGE] = pdf_opt
                     converter = DocumentConverter(format_options=fmt)
+                _log("converter_ready", pipeline=pipeline)
             except Exception as e:
                 print(json.dumps({"ok": False, "error": f"Converter creation failed: {e}"}))
                 return
@@ -214,6 +225,8 @@ class DoclingInlineComponent(BaseFileComponent):
             # --- process files --------------------------------------------------
             results = []
             for fp in file_paths:
+                _t0 = _time.monotonic()
+                _log("convert_start", file=str(fp))
                 try:
                     res = converter.convert(fp)
                     ok = False
@@ -226,21 +239,28 @@ class DoclingInlineComponent(BaseFileComponent):
                         ok = True
                     if ok and res.document is not None:
                         doc_json = res.document.export_to_dict()
+                        _log("convert_done", file=str(fp), ok=True, secs=round(_time.monotonic() - _t0, 1), json_kb=len(str(doc_json)) // 1024)
                         results.append({
                             "document": doc_json,
                             "file_path": str(fp),
                             "status": "SUCCESS",
                         })
                     else:
+                        _log("convert_empty", file=str(fp), status=str(getattr(res, "status", "?")))
                         results.append(None)
                 except Exception as e:
-                    sys.stderr.write(f"Error processing {fp}: {e}\n")
+                    _log("convert_failed", file=str(fp), error=str(e), secs=round(_time.monotonic() - _t0, 1))
+                    _tb.print_exc()
                     results.append(None)
 
             print(json.dumps({"ok": True, "results": results}))
 
         if __name__ == "__main__":
-            main()
+            try:
+                main()
+            except Exception:
+                _tb.print_exc()
+                raise
     """)
 
     def process_files(self, file_list: list[BaseFileComponent.BaseFile]) -> list[BaseFileComponent.BaseFile]:
@@ -319,7 +339,7 @@ class DoclingInlineComponent(BaseFileComponent):
 
         if not stdout_bytes:
             err_msg = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else "no output"
-            msg = f"Docling subprocess error: {err_msg}"
+            msg = f"Docling subprocess error (exit={proc.returncode}): {err_msg[-3000:]}"
             raise RuntimeError(msg)
 
         try:

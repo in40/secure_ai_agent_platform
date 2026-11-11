@@ -1140,6 +1140,14 @@ class FileComponent(BaseFileComponent):
         child_script = textwrap.dedent(
             r"""
             import json, sys
+            import time as _time
+            import resource as _res
+            import traceback as _tb
+
+            def _log(stage, **kw):
+                rss = _res.getrusage(_res.RUSAGE_SELF).ru_maxrss / 1024
+                sys.stderr.write("[docling-child %s] %s rss_mb=%.0f %s\n" % (_time.strftime("%H:%M:%S"), stage, rss, kw))
+                sys.stderr.flush()
 
             def try_imports():
                 try:
@@ -1170,8 +1178,9 @@ class FileComponent(BaseFileComponent):
                                     pipe.ocr_options.lang = ["eng", "rus"]
                                 elif ocr_engine == "easyocr":
                                     pipe.ocr_options.lang = ["en", "ru"]
-                            except Exception:
+                            except Exception as e:
                                 # If OCR setup fails, disable it
+                                _log("ocr_setup_failed", engine=ocr_engine, error=str(e))
                                 pipe.do_ocr = False
 
                         fmt = {}
@@ -1262,13 +1271,19 @@ class FileComponent(BaseFileComponent):
                 pipeline = cfg["pipeline"]
                 ocr_engine = cfg.get("ocr_engine")
                 meta = {"file_path": file_path}
+                _log("start", file=str(file_path), pipeline=pipeline, ocr_engine=str(ocr_engine))
 
                 try:
                     ConversionStatus, InputFormat, DocumentConverter, ImageRefMode, strategy = try_imports()
                     converter = create_converter(strategy, InputFormat, DocumentConverter, pipeline, ocr_engine)
+                    _log("converter_ready", pipeline=pipeline)
+                    _t0 = _time.monotonic()
                     try:
                         res = converter.convert(file_path)
+                        _log("convert_done", file=str(file_path), secs=round(_time.monotonic() - _t0, 1))
                     except Exception as e:
+                        _log("convert_failed", file=str(file_path), error=str(e), secs=round(_time.monotonic() - _t0, 1))
+                        _tb.print_exc()
                         print(json.dumps({"ok": False, "error": f"Docling conversion error: {e}", "meta": meta}))
                         return
 
@@ -1325,7 +1340,11 @@ class FileComponent(BaseFileComponent):
                     )
 
             if __name__ == "__main__":
-                main()
+                try:
+                    main()
+                except Exception:
+                    _tb.print_exc()
+                    raise
             """
         )
 
@@ -1384,7 +1403,7 @@ class FileComponent(BaseFileComponent):
 
         if not stdout_bytes:
             err_msg = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else "no output from child process"
-            return Data(data={"error": f"Docling subprocess error: {err_msg}", "file_path": original_file_path})
+            return Data(data={"error": f"Docling subprocess error (exit={proc.returncode}): {err_msg[-3000:]}", "file_path": original_file_path})
 
         try:
             result = json.loads(stdout_bytes.decode("utf-8"))
