@@ -8,6 +8,26 @@ RUN microdnf install -y --setopt=install_weak_deps=0 \
     poppler-utils \
     && microdnf clean all && rm -rf /var/cache/dnf/*
 
+# LibreOffice (headless) — legacy doc/ppt/xls conversion for docling
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+      curl expat glib2 fontconfig freetype libX11 libXext libXrender libXft libXt \
+      libXinerama libXrandr libXcursor libXcomposite libXdamage libXfixes \
+      libxkbcommon gtk3 pango cairo nss cups-libs dbus-libs glibc-langpack-en findutils \
+    && curl -sL -o /tmp/lo.tar.gz https://download.documentfoundation.org/libreoffice/stable/26.8.2/rpm/x86_64/LibreOffice_26.8.2_Linux_x86-64_rpm.tar.gz \
+    && cd /tmp && tar xzf lo.tar.gz \
+    && rpm -ivh --nodeps \
+         /tmp/LibreOffice_*/RPMS/libreoffice26.8-26*.rpm \
+         /tmp/LibreOffice_*/RPMS/libreoffice26.8-ure*.rpm \
+         /tmp/LibreOffice_*/RPMS/libobasis26.8-core*.rpm \
+         /tmp/LibreOffice_*/RPMS/libobasis26.8-writer*.rpm \
+         /tmp/LibreOffice_*/RPMS/libobasis26.8-impress*.rpm \
+         /tmp/LibreOffice_*/RPMS/libobasis26.8-calc*.rpm \
+         /tmp/LibreOffice_*/RPMS/libobasis26.8-en-US*.rpm \
+         /tmp/LibreOffice_*/RPMS/libobasis26.8-graphicfilter*.rpm \
+    && ln -sf /opt/libreoffice26.8/program/soffice /usr/bin/soffice \
+    && rm -rf /tmp/lo.tar.gz /tmp/LibreOffice_* \
+    && microdnf clean all && rm -rf /var/cache/dnf/*
+
 USER user
 
 RUN uv pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision

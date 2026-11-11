@@ -28,6 +28,15 @@ Offline host: `docker save` both images on a machine with internet, transfer, `d
 API-ключ + flow (список через логин) + session_id + чат. Тот же origin, что и API — CORS не нужен.
 Реализация: `patched_main.py` → `langflow/main.py` (роут) + `simpleui/index.html` → `/app/simpleui/`.
 
+## Document formats (Docling node)
+Whitelist `VALID_EXTENSIONS` покрывает всё, что умеет docling: PDF, изображения
+(jpg/jpeg/png/tif/tiff/bmp/webp/gif), docx/pptx/xlsx, legacy **doc/ppt/xls** (конвертирует
+встроенный LibreOffice 26.8 headless, `/usr/bin/soffice`), ODF (odt/ods/odp),
+iWork (pages/key/numbers), epub, rtf, md/txt/html/xml/csv/json/yaml, tex, eml/msg.
+Audio/video не включены — ASR-модели в образ не входят.
+LibreOffice добавляет к образу ~500MB; ставится из официального tarball
+documentfoundation (RPM-пакеты core/writer/impress/calc, `rpm -ivh --nodeps` + системные X-зависимости).
+
 ## DoclingRemote component
 Flow node that converts documents via the `docling-serve` container instead of in-process Docling.
 - URL: `http://docling-serve:5001` (compose service name)

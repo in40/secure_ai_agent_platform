@@ -20,36 +20,26 @@ class DoclingInlineComponent(BaseFileComponent):
 
     # https://docling-project.github.io/docling/usage/supported_formats/
     VALID_EXTENSIONS = [
-        "adoc",
-        "asciidoc",
-        "asc",
-        "bmp",
-        "csv",
-        "dotx",
-        "dotm",
-        "docm",
-        "docx",
-        "htm",
-        "html",
-        "jpeg",
-        "jpg",
-        "json",
-        "md",
+        # PDF + images (OCR targets)
         "pdf",
-        "png",
-        "potx",
-        "ppsx",
-        "pptm",
-        "potm",
-        "ppsm",
-        "pptx",
-        "tiff",
-        "txt",
-        "xls",
-        "xlsx",
-        "xhtml",
-        "xml",
-        "webp",
+        "jpg", "jpeg", "png", "tif", "tiff", "bmp", "webp", "gif",
+        # MS Office modern
+        "docx", "dotx", "docm", "dotm",
+        "pptx", "potx", "ppsx", "pptm", "potm", "ppsm",
+        "xlsx", "xlsm", "xltx", "xltm",
+        # MS Office legacy (converted via bundled LibreOffice)
+        "doc", "dot", "ppt", "pot", "pps", "xls", "xlt",
+        # OpenDocument + iWork + misc documents
+        "odt", "ott", "ods", "ots", "odp", "otp",
+        "pages", "key", "numbers",
+        "epub", "rtf",
+        # text/markup
+        "md", "markdown", "txt", "text", "qmd", "rmd",
+        "html", "htm", "xhtml", "mhtml", "mht",
+        "xml", "nxml", "xbrl", "dclx",
+        "adoc", "asciidoc", "asc",
+        "tex", "latex", "csv", "json", "yaml",
+        "eml", "msg",
     ]
 
     inputs = [
