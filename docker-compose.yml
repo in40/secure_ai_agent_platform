@@ -10,7 +10,7 @@ services:
     environment:
     - LANGFLOW_HOST=0.0.0.0
     - LANGFLOW_PORT=7860
-    - LANGFLOW_WORKERS=2
+    - LANGFLOW_WORKERS=1
     - OMP_NUM_THREADS=4
     - MKL_NUM_THREADS=4
     - LANGFLOW_CONFIG_DIR=/app/langflow
