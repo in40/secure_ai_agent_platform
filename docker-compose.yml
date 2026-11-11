@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   langflow:
-    image: aso9864/langflow-v2:1.0.29
+    image: aso9864/langflow-v2:1.0.28
     env_file:
     - secrets.env
     container_name: langflow-v2
@@ -40,15 +40,17 @@ services:
     - langflow-v2_default
     - docling_default
     restart: unless-stopped
-  docling-serve:
-    image: aso9864/docling-serve-cpu:1.0.29
-    container_name: docling-serve
-    mem_limit: 8g
-    environment:
-    - DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1
-    networks:
-    - langflow-v2_default
-    restart: unless-stopped
+  # ВРЕМЕННО ОТКЛЮЧЕН — ждёт согласования ИБ (отдельный контейнер-сервис).
+  # Разрешить после одобрения; langflow 1.0.28 уже содержит ноду DoclingRemote для неё.
+  # docling-serve:
+  #   image: aso9864/docling-serve-cpu:1.0.29
+  #   container_name: docling-serve
+  #   mem_limit: 8g
+  #   environment:
+  #   - DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1
+  #   networks:
+  #   - langflow-v2_default
+  #   restart: unless-stopped
   postgres:
     image: postgres:16
     container_name: langflow-v2-postgres
