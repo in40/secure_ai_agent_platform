@@ -14,9 +14,9 @@
   button { cursor:pointer; }
   button:hover { border-color:var(--accent); }
   #chat { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; }
-  .msg { max-width:80%; padding:10px 14px; border-radius:12px; white-space:pre-wrap; word-break:break-word; }
+  .msg { max-width:85%; padding:10px 14px; border-radius:12px; white-space:pre-wrap; word-break:break-word; }
   .user { align-self:flex-end; background:var(--accent); color:#fff; }
-  .bot  { align-self:flex-start; background:var(--panel); border:1px solid var(--border); }
+  .bot  { align-self:flex-start; background:var(--panel); border:1px solid var(--border); max-width:95%; }
   .err  { align-self:center; color:#ff7b72; font-size:13px; }
   .meta { align-self:center; color:var(--muted); font-size:12px; }
   footer { display:flex; gap:8px; padding:12px 16px; background:var(--panel); border-top:1px solid var(--border); }
@@ -38,8 +38,15 @@
 </header>
 <div id="chat"><div class="meta">Выберите flow, введите API-ключ (Langflow → Settings → API Keys) и напишите сообщение.</div></div>
 <footer>
-  <textarea id="prompt" placeholder="Сообщение... (Enter — отправить, Shift+Enter — перенос)"></textarea>
-  <button id="sendBtn">Отправить</button>
+  <div style="display:flex;flex-direction:column;flex:1;gap:6px">
+    <div id="files" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <div style="display:flex;gap:8px">
+      <button id="attachBtn" title="Прикрепить файлы">📎</button>
+      <input id="fileInput" type="file" multiple style="display:none">
+      <textarea id="prompt" placeholder="Сообщение... (Enter — отправить, Shift+Enter — перенос)"></textarea>
+      <button id="sendBtn">Отправить</button>
+    </div>
+  </div>
 </footer>
 <div style="display:none" id="loginForm">
   <div style="padding:8px 16px;background:var(--panel);border-top:1px solid var(--border);display:flex;gap:8px">
@@ -51,6 +58,27 @@
 const $ = id => document.getElementById(id);
 const LS = { flow:'sf_flow', session:'sf_session', apikey:'sf_apikey' };
 let jwt = '';
+let attached = [];
+let nodeIds = {};   // flow_id -> {chatInput, uploadedFile}
+
+$('attachBtn').onclick = () => $('fileInput').click();
+$('fileInput').onchange = () => {
+  for (const f of $('fileInput').files) attached.push(f);
+  $('fileInput').value = '';
+  renderFiles();
+};
+function renderFiles() {
+  $('files').innerHTML = '';
+  attached.forEach((f, i) => {
+    const c = document.createElement('span');
+    c.style.cssText = 'background:#232932;border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:12px';
+    c.textContent = `📄 ${f.name} (${(f.size/1024).toFixed(0)}KB) `;
+    const x = document.createElement('span');
+    x.style.cssText = 'cursor:pointer;color:var(--muted)'; x.textContent = '✕';
+    x.onclick = () => { attached.splice(i, 1); renderFiles(); };
+    c.appendChild(x); $('files').appendChild(c);
+  });
+}
 
 $('apikey').value = localStorage.getItem(LS.apikey) || '';
 $('session').value = localStorage.getItem(LS.session) || ('ui-' + Math.random().toString(36).slice(2, 10));
@@ -58,7 +86,7 @@ localStorage.setItem(LS.session, $('session').value);
 
 function add(cls, text) {
   const d = document.createElement('div');
-  d.className = cls; d.textContent = text;
+  d.className = 'msg ' + cls; d.textContent = text;
   $('chat').appendChild(d); $('chat').scrollTop = $('chat').scrollHeight;
   return d;
 }
@@ -72,7 +100,7 @@ $('doLogin').onclick = async () => {
   const body = new URLSearchParams({ username: $('user').value, password: $('pass').value });
   try {
     const r = await fetch('/api/v1/login', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
-    if (!r.ok) throw new Error('login: ' + r.status);
+    if (!r.ok) throw new Error('Логин не прошёл (' + r.status + ') — проверьте логин/пароль');
     jwt = (await r.json()).access_token;
     $('loginForm').style.display = 'none';
     await loadFlows();
@@ -96,11 +124,63 @@ async function loadFlows() {
 $('flow').onchange = () => localStorage.setItem(LS.flow, $('flow').value);
 
 function extractOutputs(data) {
+  let outs = data.outputs;
+  if (typeof outs === 'string') { try { outs = JSON.parse(outs); } catch (e) { /* keep */ } }
   const parts = [];
-  for (const g of (data.outputs || []))
-    for (const o of (g.outputs || []))
-      if (o.content) parts.push(typeof o.content === 'string' ? o.content : JSON.stringify(o.content));
-  return parts.join('\n\n') || (data.status ?? JSON.stringify(data));
+  const push = v => { if (typeof v === 'string' && v.trim()) parts.push(v.trim()); };
+  for (const g of (Array.isArray(outs) ? outs : []))
+    for (const o of (g.outputs || [])) {
+      const r = o.results || {};
+      const m = r.message || {};
+      if (m.data) push(m.data[m.text_key || 'text']);
+      push(o.content);
+      if (typeof r === 'string') push(r);
+    }
+  return [...new Set(parts)].join('\n\n') || (data.status ?? JSON.stringify(data).slice(0, 1500));
+}
+
+function mdToHtml(s) {
+  // reflow: LLM often emits bullets/numbers inline — break lines before them
+  s = s.replace(/ +\* +(?=[А-Яа-яA-Za-z0-9«"])/g, '\n• ')
+       .replace(/(^| )(\d{1,2}\. )(?=[А-Яа-яA-Za-z0-9«"])/gm, '$1\n\n$2');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^#{1,4} (.*)$/gm, '<b>$1</b>')
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/^[-•] (.*)$/gm, '&nbsp;&nbsp;• $1');
+}
+
+async function detectNodes(flowId) {
+  if (nodeIds[flowId]) return nodeIds[flowId];
+  if (!jwt) return null;
+  const r = await fetch('/api/v1/flows/' + flowId, { headers:{ Authorization:'Bearer ' + jwt } });
+  if (!r.ok) { add('err', 'flow graph: ' + r.status); return null; }
+  const flow = await r.json();
+  const nodes = ((flow.data || {}).nodes) || [];
+  const out = { chatInput: null, uploadedFile: null };
+  for (const n of nodes) {
+    const t = (n.data || {}).type;
+    if (t === 'ChatInput' && !out.chatInput) out.chatInput = n.id;
+    if (t === 'UploadedFile') out.uploadedFile = n.id;
+  }
+  nodeIds[flowId] = out;
+  return out;
+}
+
+async function uploadFiles() {
+  const paths = [];
+  for (const f of attached) {
+    const fd = new FormData();
+    fd.append('file', f, f.name);
+    const r = await fetch('/api/v2/files/', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + jwt },  // no Content-Type — browser sets multipart boundary
+      body: fd
+    });
+    if (!r.ok) throw new Error('upload ' + f.name + ': ' + r.status + ' ' + (await r.text()).slice(0,150));
+    const j = await r.json();
+    paths.push(j.file_path);
+  }
+  return paths;
 }
 
 async function send() {
@@ -108,19 +188,35 @@ async function send() {
   const text = $('prompt').value.trim();
   if (!flowId) return add('err', 'Выберите flow');
   if (!key)   return add('err', 'Нужен API-ключ');
-  if (!text)  return;
+  if (!text && !attached.length) return;
+  let tweaks = null, sentFiles = [];
+  if (attached.length) {
+    if (!jwt) return add('err', 'Для файлов нужен логин — нажмите 🔑');
+    const ids = await detectNodes(flowId);
+    if (!ids || !ids.uploadedFile) return add('err', 'В flow нет ноды «Uploaded File» — добавьте её');
+    try {
+      const paths = await uploadFiles();
+      sentFiles = attached.map(f => f.name); attached = []; renderFiles();
+      tweaks = {};
+      tweaks[ids.uploadedFile] = { file_path: paths.join('\n') };
+      if (ids.chatInput) tweaks[ids.chatInput] = { input_value: text };
+    } catch (e) { return add('err', String(e)); }
+  }
   $('prompt').value = '';
-  add('user', text);
+  const label = text + (sentFiles.length ? '\n📎 ' + sentFiles.join(', ') : '');
+  add('user', label || '📎 ' + sentFiles.join(', '));
   const thinking = add('bot', '…');
+  const body = { input_value: text, session_id: $('session').value.trim(), input_type:'chat', output_type:'chat' };
+  if (tweaks) body.tweaks = tweaks;
   try {
     const r = await fetch(`/api/v1/run/${flowId}`, {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'x-api-key': key },
-      body: JSON.stringify({ input_value: text, session_id: $('session').value.trim(), input_type:'chat', output_type:'chat' })
+      body: JSON.stringify(body)
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) { thinking.remove(); add('err', `${r.status}: ${JSON.stringify(data).slice(0,300)}`); return; }
-    thinking.textContent = extractOutputs(data);
+    thinking.innerHTML = mdToHtml(extractOutputs(data));
   } catch (e) { thinking.remove(); add('err', String(e)); }
 }
 $('sendBtn').onclick = send;
