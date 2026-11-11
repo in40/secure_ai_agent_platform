@@ -1340,7 +1340,7 @@ def create_app():
     async def _simpleui():
         from fastapi.responses import FileResponse
 
-        return FileResponse("/app/simpleui/index.html")
+        return FileResponse("/app/simpleui/index.html", headers={"Cache-Control": "no-store"})
 
     return app
 

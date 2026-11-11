@@ -44,9 +44,10 @@ class UploadedFileComponent(Component):
         resolved = []
         for p in parts:
             if not os.path.isabs(p):
-                cand = os.path.join(self._config_dir(), p)
-                if os.path.exists(cand):
-                    p = cand
+                p = os.path.join(self._config_dir(), p)
+            if not os.path.exists(p):
+                msg = f"UploadedFile: file not found: {p} (check UI upload / hard-reload browser cache)"
+                raise ValueError(msg)
             resolved.append(p)
         return resolved
 

@@ -178,7 +178,7 @@ async function uploadFiles() {
     });
     if (!r.ok) throw new Error('upload ' + f.name + ': ' + r.status + ' ' + (await r.text()).slice(0,150));
     const j = await r.json();
-    paths.push(j.file_path);
+    paths.push(j.file_path || j.path);
   }
   return paths;
 }
@@ -199,7 +199,6 @@ async function send() {
       sentFiles = attached.map(f => f.name); attached = []; renderFiles();
       tweaks = {};
       tweaks[ids.uploadedFile] = { file_path: paths.join('\n') };
-      if (ids.chatInput) tweaks[ids.chatInput] = { input_value: text };
     } catch (e) { return add('err', String(e)); }
   }
   $('prompt').value = '';
