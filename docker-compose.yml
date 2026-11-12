@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   langflow:
     image: aso9864/langflow-v2:1.0.28

@@ -13,13 +13,14 @@ Published images (Docker Hub):
 - `patched_tracing.py` → `lfx/services/tracing/service.py` (full OTel tracing: flow/component spans, OTLP export, LLM scope allowlist)
 - `precache_models.py` — build-time model download step
 - `custom_components/` — mounted at `/app/custom_components` (LANGFLOW_COMPONENTS_PATH): PDFPlumber + VeriAgent input/grounding/tool guards (advisory, Ed25519 receipts in postgres `verai_receipts`) + **DoclingRemote** (sends files to the docling-serve container)
-- `docker-compose.yml` — langflow + docling-serve + postgres 16; all secrets via `secrets.env`
+- `docker-compose.yml` — langflow + docling-serve + postgres 16; all secrets via `secrets.env`.
+  Compose V2 format: no `version:` key, use the `docker compose` CLI (v1 `docker-compose` also works).
 
 ## Deploy
 ```
 git clone <this repo> && cd secure_ai_agent_platform
 cp secrets.env.example secrets.env   # fill real values, chmod 600
-docker-compose up -d
+docker compose up -d
 ```
 Offline host: `docker save` both images on a machine with internet, transfer, `docker load`, then the same compose up.
 
