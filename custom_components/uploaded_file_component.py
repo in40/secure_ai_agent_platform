@@ -1,4 +1,6 @@
+import glob
 import os
+import urllib.parse
 
 from langflow.custom import Component
 from langflow.io import Output, StrInput
@@ -38,17 +40,53 @@ class UploadedFileComponent(Component):
     def _config_dir(self) -> str:
         return os.environ.get("LANGFLOW_CONFIG_DIR", "/app/langflow")
 
+    def _locate(self, p: str) -> str | None:
+        """Resolve an upload path leniently.
+
+        Exact match first; then search user storage dirs by basename, tolerating
+        URL-encoding (%20), case differences and date/timestamp prefixes that
+        storage layers sometimes add to saved file names.
+        """
+        if not os.path.isabs(p):
+            p = os.path.join(self._config_dir(), p)
+        if os.path.exists(p):
+            return p
+        base = os.path.basename(urllib.parse.unquote(p))
+        for cand in (
+            base,
+            urllib.parse.unquote(base),
+        ):
+            if not cand:
+                continue
+            for pat in (
+                os.path.join(self._config_dir(), "*", cand),
+                os.path.join(self._config_dir(), "*", "*_" + cand),
+                os.path.join(self._config_dir(), "*", "*" + cand),
+                os.path.join(self._config_dir(), "*", "*", cand),
+            ):
+                hits = sorted(glob.glob(pat))
+                if hits:
+                    return hits[-1]
+            low = cand.lower()
+            for d in glob.glob(os.path.join(self._config_dir(), "*/")):
+                try:
+                    for f in os.listdir(d):
+                        if f.lower() == low or f.lower().endswith("_" + low):
+                            return os.path.join(d, f)
+                except OSError:
+                    continue
+        return None
+
     def _paths(self) -> list[str]:
         raw = self.file_path or ""
         parts = [p.strip() for p in raw.replace(",", "\n").splitlines() if p.strip()]
         resolved = []
         for p in parts:
-            if not os.path.isabs(p):
-                p = os.path.join(self._config_dir(), p)
-            if not os.path.exists(p):
-                msg = f"UploadedFile: file not found: {p} (check UI upload / hard-reload browser cache)"
+            found = self._locate(p)
+            if found is None:
+                msg = f"UploadedFile: file not found: {p} (searched {self._config_dir()} by name too)"
                 raise ValueError(msg)
-            resolved.append(p)
+            resolved.append(found)
         return resolved
 
     def build_path(self) -> str:

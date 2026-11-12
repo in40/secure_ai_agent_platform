@@ -89,9 +89,14 @@ class PDFPlumberComponent(Component):
                 if not part:
                     continue
                 if not os.path.isabs(part):
-                    cand = os.path.join(self._config_dir(), part)
-                    if os.path.exists(cand):
-                        part = cand
+                    part = os.path.join(self._config_dir(), part)
+                if not os.path.exists(part):
+                    import glob as _glob
+                    import urllib.parse as _up
+                    base = os.path.basename(_up.unquote(part))
+                    hits = sorted(_glob.glob(os.path.join(self._config_dir(), "*", "*" + base)))
+                    if hits:
+                        part = hits[-1]
                 out.append(part)
         return out
 
