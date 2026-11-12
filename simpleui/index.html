@@ -49,14 +49,15 @@
   </div>
 </footer>
 <div style="display:none" id="loginForm">
-  <div style="padding:8px 16px;background:var(--panel);border-top:1px solid var(--border);display:flex;gap:8px">
+  <div style="padding:8px 16px;background:var(--panel);border-top:1px solid var(--border);display:flex;gap:8px;align-items:center">
     <input id="user" placeholder="username"><input id="pass" type="password" placeholder="password">
+    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px"><input type="checkbox" id="remember" checked> запомнить</label>
     <button id="doLogin">Login</button>
   </div>
 </div>
 <script>
 const $ = id => document.getElementById(id);
-const LS = { flow:'sf_flow', session:'sf_session', apikey:'sf_apikey' };
+const LS = { flow:'sf_flow', session:'sf_session', apikey:'sf_apikey', user:'sf_user', pass:'sf_pass', remember:'sf_remember' };
 let jwt = '';
 let attached = [];
 let nodeIds = {};   // flow_id -> {chatInput, uploadedFile}
@@ -83,6 +84,11 @@ function renderFiles() {
 $('apikey').value = localStorage.getItem(LS.apikey) || '';
 $('session').value = localStorage.getItem(LS.session) || ('ui-' + Math.random().toString(36).slice(2, 10));
 localStorage.setItem(LS.session, $('session').value);
+if (localStorage.getItem(LS.remember) !== '0') {
+  $('user').value = localStorage.getItem(LS.user) || '';
+  $('pass').value = localStorage.getItem(LS.pass) || '';
+}
+$('remember').checked = localStorage.getItem(LS.remember) !== '0';
 
 function add(cls, text) {
   const d = document.createElement('div');
@@ -91,19 +97,29 @@ function add(cls, text) {
   return d;
 }
 
-$('apikey').onchange = () => localStorage.setItem(LS.apikey, $('apikey').value.trim());
+$('apikey').oninput = () => localStorage.setItem(LS.apikey, $('apikey').value.trim());
 $('session').onchange = () => localStorage.setItem(LS.session, $('session').value.trim());
 $('clearBtn').onclick = () => { $('chat').innerHTML = ''; };
 $('loginBtn').onclick = () => $('loginForm').style.display = $('loginForm').style.display === 'none' ? '' : 'none';
 
-$('doLogin').onclick = async () => {
+async function doLogin() {
   const body = new URLSearchParams({ username: $('user').value, password: $('pass').value });
+  const r = await fetch('/api/v1/login', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
+  if (!r.ok) throw new Error('Логин не прошёл (' + r.status + ') — проверьте логин/пароль');
+  jwt = (await r.json()).access_token;
+  if (localStorage.getItem(LS.remember) !== '0') {
+    localStorage.setItem(LS.user, $('user').value);
+    localStorage.setItem(LS.pass, $('pass').value);
+  }
+}
+
+$('doLogin').onclick = async () => {
   try {
-    const r = await fetch('/api/v1/login', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body });
-    if (!r.ok) throw new Error('Логин не прошёл (' + r.status + ') — проверьте логин/пароль');
-    jwt = (await r.json()).access_token;
+    localStorage.setItem(LS.remember, $('remember').checked ? '1' : '0');
+    await doLogin();
     $('loginForm').style.display = 'none';
     await loadFlows();
+    add('meta', 'Логин выполнен, список flow загружен');
   } catch (e) { add('err', e.message); }
 };
 
@@ -191,6 +207,7 @@ async function send() {
   if (!text && !attached.length) return;
   let tweaks = null, sentFiles = [];
   if (attached.length) {
+    if (!jwt && $('user').value && $('pass').value) { try { await doLogin(); } catch (e) {} }
     if (!jwt) return add('err', 'Для файлов нужен логин — нажмите 🔑');
     const ids = await detectNodes(flowId);
     if (!ids || !ids.uploadedFile) return add('err', 'В flow нет ноды «Uploaded File» — добавьте её');
@@ -222,7 +239,12 @@ $('sendBtn').onclick = send;
 $('prompt').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 });
-loadFlows();
+(async () => {
+  if (!jwt && $('user').value && $('pass').value) {
+    try { await doLogin(); } catch (e) { /* silent — user can press 🔑 */ }
+  }
+  loadFlows();
+})();
 </script>
 </body>
 </html>

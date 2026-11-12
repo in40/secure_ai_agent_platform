@@ -1,26 +1,41 @@
+import os
 from typing import Any
 
 import pdfplumber
 
 from langflow.custom import Component
-from langflow.io import BoolInput, DropdownInput, FileInput, IntInput, Output
+from langflow.io import BoolInput, DropdownInput, FileInput, HandleInput, IntInput, Output
 from langflow.schema import Data
 
 
 class PDFPlumberComponent(Component):
     display_name = "PDFPlumber"
-    description = "Extract text, tables or structured data from PDFs via pdfplumber."
+    description = (
+        "Extract text, tables or structured data from PDFs via pdfplumber. "
+        "Accepts files from the widget or server paths (e.g. Uploaded File component -> File Data)."
+    )
     icon = "file-text"
     name = "PDFPlumber"
 
     inputs = [
+        HandleInput(
+            name="file_path",
+            display_name="Server File Path",
+            info=(
+                "Data object with a 'file_path' property pointing to server file"
+                " or a Message object with a path to the file. Takes precedence over 'PDF Files'."
+            ),
+            input_types=["Data", "JSON", "Message"],
+            is_list=True,
+            required=False,
+        ),
         FileInput(
             name="input_files",
             display_name="PDF Files",
-            info="PDF file(s) to process.",
+            info="PDF file(s) to process (used when Server File Path is not connected).",
             file_types=["pdf"],
             is_list=True,
-            required=True,
+            required=False,
         ),
         DropdownInput(
             name="mode",
@@ -47,7 +62,43 @@ class PDFPlumberComponent(Component):
         Output(display_name="Data", name="data", method="build_output"),
     ]
 
+    def _config_dir(self) -> str:
+        return os.environ.get("LANGFLOW_CONFIG_DIR", "/app/langflow")
+
+    def _from_handle(self) -> list[str]:
+        src = self.file_path
+        if src is None:
+            return []
+        if not isinstance(src, list):
+            src = [src]
+        out: list[str] = []
+        for item in src:
+            p = None
+            if isinstance(item, Data):
+                p = item.data.get("file_path") or item.data.get("path")
+            elif isinstance(item, str):
+                p = item
+            else:
+                text = getattr(item, "text", None)
+                if isinstance(text, str):
+                    p = text
+            if not p:
+                continue
+            for part in str(p).replace(",", "\n").splitlines():
+                part = part.strip()
+                if not part:
+                    continue
+                if not os.path.isabs(part):
+                    cand = os.path.join(self._config_dir(), part)
+                    if os.path.exists(cand):
+                        part = cand
+                out.append(part)
+        return out
+
     def _resolve_paths(self) -> list[str]:
+        handle = self._from_handle()
+        if handle:
+            return handle
         files = self.input_files
         if isinstance(files, Data):
             files = [files]
@@ -62,7 +113,7 @@ class PDFPlumberComponent(Component):
             if p:
                 paths.append(str(p))
         if not paths:
-            msg = "PDFPlumber: no input file resolved"
+            msg = "PDFPlumber: no input file resolved (connect Server File Path or select PDF Files)"
             raise ValueError(msg)
         return paths
 
