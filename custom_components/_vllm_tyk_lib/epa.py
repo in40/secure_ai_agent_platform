@@ -15,7 +15,7 @@ import httpx
 from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
-from _vllm_tyk_lib.tyk_settings import VllmTykSettings
+from _vllm_tyk_lib.tyk_settings import VllmTykSettings, get_vllm_tyk_settings
 
 _T = TypeVar("_T")
 
@@ -124,6 +124,13 @@ def _jwt_claims_for_log(access_token: str) -> dict[str, object]:
     return claims
 
 
+def _log_epa_debug(event: str, **fields: object) -> None:
+    """Пишет диагностику EPA в лог только при VLLM_EPA_DEBUG=true."""
+    if not get_vllm_tyk_settings().vllm_epa_debug:
+        return
+    logger.info(event, **fields)
+
+
 def _resolve_epa_config(settings: VllmTykSettings) -> tuple[str, str, str, bool]:
     """Собирает EPA-настройки: общий EPA__BASE_URL + EPA__CLIENT_ID/SECRET или DEBUG-заголовок."""
     try:
@@ -138,6 +145,17 @@ def _resolve_epa_config(settings: VllmTykSettings) -> tuple[str, str, str, bool]
         client_secret = _secret_to_string(config.CLIENT_SECRET)
         verify_ssl = bool(config.VERIFY_SSL)
         debug_header = _secret_to_string(config.DEBUG_AUTH_HEADER)
+        _log_epa_debug(
+            "EPA config (epa_auth.EpaConfig)",
+            epa_config_source="epa_auth",
+            epa_base_url=base_url,
+            epa_token_endpoint=_token_endpoint(base_url) if base_url else "",
+            epa_client_id=mask_sensitive_value(client_id),
+            epa_client_id_present=bool(client_id),
+            epa_client_secret_present=bool(client_secret),
+            epa_verify_ssl=verify_ssl,
+            epa_debug_auth_header_present=bool(debug_header),
+        )
         if debug_header:
             return base_url, client_id, client_secret, verify_ssl
         if not base_url or not client_id or not client_secret:
@@ -156,6 +174,17 @@ def _resolve_epa_config(settings: VllmTykSettings) -> tuple[str, str, str, bool]
     client_secret = os.environ.get("EPA__CLIENT_SECRET", "").strip()
     verify_ssl = os.environ.get("EPA__VERIFY_SSL", "true").strip().lower() not in ("0", "false", "no")
     debug_header = os.environ.get("EPA__DEBUG_AUTH_HEADER", "").strip()
+    _log_epa_debug(
+        "EPA config (os.environ fallback)",
+        epa_config_source="os.environ",
+        epa_base_url=base_url,
+        epa_token_endpoint=_token_endpoint(base_url) if base_url else "",
+        epa_client_id=mask_sensitive_value(client_id),
+        epa_client_id_present=bool(client_id),
+        epa_client_secret_present=bool(client_secret),
+        epa_verify_ssl=verify_ssl,
+        epa_debug_auth_header_present=bool(debug_header),
+    )
     if debug_header:
         return base_url, client_id, client_secret, verify_ssl
     if not base_url or not client_id or not client_secret:
@@ -181,6 +210,12 @@ def _epa_debug_header() -> str:
 
 def vllm_uses_epa_auth(settings: VllmTykSettings) -> bool:
     """True, если VLLM_API_BASE должен ходить через EPA/Tyk."""
+    _log_epa_debug(
+        "Проверяем режим EPA-аутентификации vLLM",
+        vllm_epa_auth=settings.vllm_epa_auth,
+        vllm_api_base=settings.vllm_api_base,
+        auth_mode="epa" if settings.vllm_epa_auth else "api_key",
+    )
     return settings.vllm_epa_auth
 
 
@@ -215,7 +250,7 @@ async def _fetch_new_epa_access_token(
         access_token=access_token,
         expires_at=datetime.now(UTC) + timedelta(seconds=_safe_token_ttl(expires_in)),
     )
-    logger.info(
+    _log_epa_debug(
         "EPA-токен получен для vLLM",
         token_endpoint=token_url,
         authorization=f"Bearer {mask_sensitive_value(access_token)}",
@@ -232,13 +267,34 @@ async def fetch_vllm_epa_access_token(settings: VllmTykSettings) -> str:
         raise ValueError(msg)
     debug_header = _epa_debug_header()
     if debug_header:
-        return _strip_bearer_prefix(debug_header)
+        token = _strip_bearer_prefix(debug_header)
+        _log_epa_debug(
+            "EPA-токен взят из EPA__DEBUG_AUTH_HEADER (без запроса к EPA)",
+            token_source="debug_auth_header",
+            authorization=f"Bearer {mask_sensitive_value(token)}",
+            **_jwt_claims_for_log(token),
+        )
+        return token
     cached = _local_epa_tokens.get("vllm")
     if cached is not None and cached.is_valid():
+        _log_epa_debug(
+            "EPA-токен взят из локального кэша",
+            token_source="local_cache",
+            authorization=f"Bearer {mask_sensitive_value(cached.access_token)}",
+            expires_at=cached.expires_at.isoformat(),
+            **_jwt_claims_for_log(cached.access_token),
+        )
         return cached.access_token
     async with _local_epa_token_lock:
         cached = _local_epa_tokens.get("vllm")
         if cached is not None and cached.is_valid():
+            _log_epa_debug(
+                "EPA-токен взят из локального кэша после ожидания lock",
+                token_source="local_cache_after_lock",
+                authorization=f"Bearer {mask_sensitive_value(cached.access_token)}",
+                expires_at=cached.expires_at.isoformat(),
+                **_jwt_claims_for_log(cached.access_token),
+            )
             return cached.access_token
         base_url, client_id, client_secret, verify_ssl = _resolve_epa_config(settings)
         return await _fetch_new_epa_access_token(
@@ -280,6 +336,12 @@ def fetch_vllm_epa_access_token_sync(settings: VllmTykSettings) -> str:
 def epa_bearer_headers(access_token: str) -> dict[str, str]:
     """Заголовок Authorization для HTTP-вызовов к Tyk."""
     normalized_token = _strip_bearer_prefix(access_token)
+    _log_epa_debug(
+        "Собираем Authorization для Tyk",
+        authorization=f"Bearer {mask_sensitive_value(normalized_token)}",
+        token_chars=len(normalized_token),
+        **_jwt_claims_for_log(normalized_token),
+    )
     return {"Authorization": f"Bearer {normalized_token}"}
 
 

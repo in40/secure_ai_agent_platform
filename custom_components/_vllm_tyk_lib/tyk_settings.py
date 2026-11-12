@@ -20,6 +20,8 @@ class VllmTykSettings(BaseSettings):
     vllm_model_name: str = Field(default="", validation_alias="VLLM_MODEL_NAME")
     # true — VLLM_API_BASE ходит через Tyk с EPA access_token (банковский контур)
     vllm_epa_auth: bool = Field(default=False, validation_alias="VLLM_EPA_AUTH")
+    # true — подробная диагностика EPA (claims токена, config, endpoint) в логах
+    vllm_epa_debug: bool = Field(default=False, validation_alias="VLLM_EPA_DEBUG")
     # false — отключить проверку TLS (dev-контур)
     vllm_ssl_verify: bool = Field(default=True, validation_alias="VLLM_SSL_VERIFY")
     # Лимит исходящих HTTP к LLM API (0 — без ограничения)
