@@ -1,0 +1,66 @@
+{
+  "features": {
+    "docling_core": {
+      "description": "Docling Inline + Chunk DoclingDocument (torch stack + layout/table models)",
+      "pip": ["docling", "docling-slim", "docling-core", "docling-ibm-models", "docling-parse", "torch", "torchvision", "transformers", "accelerate", "opencv-python", "opencv-python-headless"],
+      "paths": ["/app/data/.cache/docling", "/app/data/.cache/huggingface"],
+      "match_types": ["doclinginline", "chunkdoclingdocument", "doclingdocument"]
+    },
+    "ocr_easyocr": {
+      "description": "EasyOCR engine + models",
+      "pip": ["easyocr"],
+      "paths": ["/app/data/.cache/docling/models/EasyOcr"],
+      "field_rule": { "type": "doclinginline", "field": "ocr_engine", "values": ["easyocr"] }
+    },
+    "ocr_tesseract": {
+      "description": "tesserocr + tessdata",
+      "pip": ["tesserocr"],
+      "paths": ["/usr/share/tessdata"],
+      "field_rule": { "type": "doclinginline", "field": "ocr_engine", "values": ["tesserocr"] }
+    },
+    "ocr_rapidocr": {
+      "description": "rapidocr + onnxruntime",
+      "pip": ["rapidocr", "rapidocr-onnxruntime", "onnxruntime"],
+      "field_rule": { "type": "doclinginline", "field": "ocr_engine", "values": ["rapidocr"] }
+    },
+    "piccls": {
+      "description": "DocumentFigureClassifier model",
+      "paths": ["/app/data/.cache/huggingface/hub/models--docling-project--DocumentFigureClassifier-v2.5"],
+      "field_rule": { "type": "doclinginline", "field": "do_picture_classification", "values": ["true", "True", true] }
+    },
+    "libreoffice": {
+      "description": "LibreOffice for legacy doc/ppt/xls (kept whenever Docling Inline present — input types unknown upfront; drop with --no-lo)",
+      "paths": ["/opt/libreoffice26.8", "/usr/bin/soffice"],
+      "match_types": ["doclinginline"]
+    },
+    "pdfplumber": {
+      "description": "pdfplumber package",
+      "pip": ["pdfplumber", "pdfminer.six"],
+      "match_types": ["pdfplumber"]
+    },
+    "neo4j": {
+      "description": "neo4j driver",
+      "pip": ["neo4j"],
+      "match_types": ["neo4j", "graphedit", "graphviewer"]
+    },
+    "calamine": {
+      "description": "Excel parser",
+      "pip": ["python-calamine"],
+      "match_types": ["excel"]
+    },
+    "uv_cache": {
+      "description": "uv build cache (never needed at runtime)",
+      "paths": ["/app/data/.cache/uv"],
+      "always_remove": true
+    }
+  },
+  "known_base_types": [
+    "chatinput", "chatoutput", "language", "prompt template", "promptcomponent",
+    "parsercomponent", "parser", "uploadedfile", "doclingremote", "splittext",
+    "file", "url", "memory", "openaiembedding", "embeddings", "vectorsearch",
+    "qdrant", "sqlconnector", "apiretriever", "conditionalrouter", "subworkflow",
+    "veriagent", "chatsession", "storemessage", "getmessage", "advancedprompt",
+    "languagemodelcomponent", "doclingremotecomponent", "chatinputcomponent",
+    "chatoutputcomponent", "parsercomponent", "webhook", "receive", "sendhttprequest"
+  ]
+}
