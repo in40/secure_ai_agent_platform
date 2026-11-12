@@ -82,8 +82,8 @@ function renderFiles() {
 }
 
 $('apikey').value = localStorage.getItem(LS.apikey) || '';
-$('session').value = localStorage.getItem(LS.session) || ('ui-' + Math.random().toString(36).slice(2, 10));
-localStorage.setItem(LS.session, $('session').value);
+// session: always fresh on load/reload (new conversation per page open)
+$('session').value = 'ui-' + Math.random().toString(36).slice(2, 10);
 if (localStorage.getItem(LS.remember) !== '0') {
   $('user').value = localStorage.getItem(LS.user) || '';
   $('pass').value = localStorage.getItem(LS.pass) || '';
