@@ -67,3 +67,4 @@ COPY patched_docling_inline.py /app/.venv/lib/python3.14/site-packages/lfx_docli
 COPY patched_qdrant_bundle.py /app/.venv/lib/python3.14/site-packages/lfx_bundles/qdrant/qdrant.py
 COPY patched_main.py /app/.venv/lib/python3.14/site-packages/langflow/main.py
 COPY simpleui/ /app/simpleui/
+ENV PYTHONPATH=/app/custom_components
