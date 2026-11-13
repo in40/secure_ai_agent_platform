@@ -1,0 +1,81 @@
+FROM astra-linux/alse-python:1.8.1-3.13.5
+
+USER root
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Системные зависимости: GL/glib (opencv), poppler (pdf), шрифты с кириллицей,
+# LibreOffice headless для конвертации doc/ppt/xls (из реестра Astra, без внешних загрузок)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libgl1 libglib2.0-0 poppler-utils findutils \
+      fonts-dejavu-core fonts-liberation \
+      libxrender1 libxkbcommon0 libnss3 libsm6 \
+      libreoffice-writer libreoffice-calc libreoffice-impress \
+    && rm -rf /var/lib/apt/lists/*
+
+# пользователь/каталоги как в официальном образе langflow (uid 1000, gid 0)
+RUN useradd -m -u 1000 -g 0 user \
+    && mkdir -p /app /app/data \
+    && chown -R 1000:0 /app
+
+USER user
+ENV HOME=/app/data \
+    PATH=/app/.venv/bin:/usr/local/bin:/usr/bin:/bin
+RUN python3 -m venv /app/.venv && /app/.venv/bin/pip install -U pip uv
+
+RUN /app/.venv/bin/uv pip install --python /app/.venv/bin/python "langflow==1.13.0" "psycopg[binary]" psycopg2-binary
+RUN /app/.venv/bin/uv pip install --python /app/.venv/bin/python --index-url https://download.pytorch.org/whl/cpu torch torchvision
+RUN /app/.venv/bin/uv pip install --python /app/.venv/bin/python "lfx-docling[local,image-description]" "python-calamine" "lfx-bundles" neo4j pdfplumber easyocr \
+    && rm -rf /app/.venv/lib/python3.13/site-packages/faker/providers/*/uk_UA /app/data/.cache/uv/archive-v0/*/faker/providers/*/uk_UA
+# ИБ: pillow>=13 (CVE-2026-112403/112398/112900/96639), certifi>=2026.10.19 (emSign CA)
+RUN /app/.venv/bin/uv pip install --python /app/.venv/bin/python -U "pillow>=13.0.0" "certifi>=2026.10.19"
+
+# бандл фронтенда должен совпадать с патчем (иначе COPY ниже положит патч на несуществующий файл)
+RUN test -f /app/.venv/lib/python3.13/site-packages/langflow/frontend/assets/index-CpAth-6K.js
+
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 \
+    HF_HOME=/app/data/.cache/huggingface
+
+# Pre-cache всех моделей Docling/OCR — рантайм без сети
+COPY --chown=1000:0 precache_models.py /tmp/precache_models.py
+RUN /app/.venv/bin/python /tmp/precache_models.py && rm /tmp/precache_models.py
+
+EXPOSE 7860
+
+# Кастомные компоненты; _vllm_tyk_lib выносим из сканируемого каталога
+COPY custom_components/ /app/custom_components/
+USER root
+RUN mv /app/custom_components/_vllm_tyk_lib /app/_vllm_tyk_lib \
+    && rm -rf /app/custom_components/__pycache__ /app/custom_components/*/__pycache__
+USER user
+ENV LANGFLOW_COMPONENTS_PATH=/app/custom_components
+
+# EasyOCR модели (включая кириллическое распознавание) — офлайн
+COPY --chown=1000:0 easyocr_models/ /app/data/.cache/docling/models/EasyOcr/
+
+# tesserocr: tessdata eng/rus/ukr (колесо tesserocr самодостаточно, системный tesseract не нужен)
+USER root
+COPY tessdata/ /usr/share/tessdata/
+ENV TESSDATA_PREFIX=/usr/share/tessdata
+
+# Патчи langflow/lfx (пути python3.13) + simpleui
+COPY sitecustomize.py /app/.venv/lib/python3.13/site-packages/sitecustomize.py
+COPY patched_file.py /app/.venv/lib/python3.13/site-packages/lfx/components/files_and_knowledge/file.py
+COPY patched_tracing.py /app/.venv/lib/python3.13/site-packages/lfx/services/tracing/service.py
+COPY patched_docling_inline.py /app/.venv/lib/python3.13/site-packages/lfx_docling/components/docling/docling_inline.py
+COPY patched_qdrant_bundle.py /app/.venv/lib/python3.13/site-packages/lfx_bundles/qdrant/qdrant.py
+COPY patched_frontend_index.js /app/.venv/lib/python3.13/site-packages/langflow/frontend/assets/index-CpAth-6K.js
+COPY patched_chat.py /app/.venv/lib/python3.13/site-packages/lfx/components/input_output/chat.py
+COPY patched_lfx_schemas.py /app/.venv/lib/python3.13/site-packages/lfx/utils/schemas.py
+COPY patched_langflow_schemas.py /app/.venv/lib/python3.13/site-packages/langflow/utils/schemas.py
+COPY patched_main.py /app/.venv/lib/python3.13/site-packages/langflow/main.py
+COPY simpleui/ /app/simpleui/
+RUN chown -R 1000:0 /app
+USER user
+
+ENV PYTHONPATH=/app:/app/_vllm_tyk_lib:/app/custom_components \
+    LANGFLOW_HOST=0.0.0.0 \
+    LANGFLOW_AUTO_LOGIN=False \
+    LANGFLOW_NEW_USER_IS_ACTIVE=False \
+    LANGFLOW_CONFIG_DIR=/app/langflow
+WORKDIR /app
+CMD ["langflow","run"]
