@@ -61,6 +61,20 @@ flow JSON. Профайлер such ноды:
 Типы встроенных нод langflow добавляйте в `known_base_types`, наших компонентов —
 в `base_custom_types`.
 
+## Кастомные компоненты из flow → в образ
+`export_flow_components.py` обходит все flow инстанса по API и экспортирует код
+flow-only кастомных нод (тех, что встроены в flow JSON) в `custom_components/`
+контекста сборки. Запускать **перед** `docker build`:
+```bash
+python3 lfx_builder/export_flow_components.py \
+    --url http://127.0.0.1:7861 --username <u> --password <p> \
+    --out-dir custom_components/          # без --out-dir покажет --list-only
+docker build --build-arg APP_VERSION=... -t ... .
+```
+Существующие типы не перезаписываются (`--no-skip-existing` — перезаписывать);
+при разном коде одного типа в разных flow побеждает более свежий flow (CONFLICT печатается).
+Внимание ИБ: код из flow становится частью образа.
+
 ## Добавление новой фичи в манифест
 ```json
 "feature_name": {
