@@ -65,7 +65,10 @@ ENV TESSDATA_PREFIX=/usr/share/tessdata
 COPY sitecustomize.py /app/.venv/lib/python3.14/site-packages/sitecustomize.py
 COPY patched_docling_inline.py /app/.venv/lib/python3.14/site-packages/lfx_docling/components/docling/docling_inline.py
 COPY patched_qdrant_bundle.py /app/.venv/lib/python3.14/site-packages/lfx_bundles/qdrant/qdrant.py
+COPY patched_frontend_index.js /app/.venv/lib/python3.14/site-packages/langflow/frontend/assets/index-CpAth-6K.js
 COPY patched_chat.py /app/.venv/lib/python3.14/site-packages/lfx/components/input_output/chat.py
+COPY patched_lfx_schemas.py /app/.venv/lib/python3.14/site-packages/lfx/utils/schemas.py
+COPY patched_langflow_schemas.py /app/.venv/lib/python3.14/site-packages/langflow/utils/schemas.py
 COPY patched_main.py /app/.venv/lib/python3.14/site-packages/langflow/main.py
 COPY simpleui/ /app/simpleui/
 ENV PYTHONPATH=/app/custom_components
