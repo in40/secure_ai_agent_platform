@@ -59,24 +59,15 @@ def login() -> str:
 
 
 def upsert_variable(h: dict, name: str, value: str) -> None:
+    payload = {"name": name, "type": "Credential", "value": value,
+               "default_fields": [], "category": "credentials"}
     existing = httpx.get(f"{BASE}/api/v1/variables/", headers=h, timeout=20).json()
     for v in existing:
         if v.get("name") == name and v.get("type") == "Credential":
-            if str(v.get("id")):
-                httpx.patch(
-                    f"{BASE}/api/v1/variables/{v['id']}",
-                    headers=h,
-                    json={"value": value},
-                    timeout=20,
-                )
-                log(f"variable {name}: обновлена")
-                return
-    r = httpx.post(
-        f"{BASE}/api/v1/variables/",
-        headers=h,
-        json={"name": name, "type": "Credential", "value": value},
-        timeout=20,
-    )
+            r = httpx.patch(f"{BASE}/api/v1/variables/{v['id']}", headers=h, json=payload, timeout=20)
+            log(f"variable {name}: обновлена ({r.status_code})")
+            return
+    r = httpx.post(f"{BASE}/api/v1/variables/", headers=h, json=payload, timeout=20)
     log(f"variable {name}: создана ({r.status_code})")
 
 
