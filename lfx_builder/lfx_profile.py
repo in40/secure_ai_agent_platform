@@ -64,7 +64,89 @@ def load_flow_api(flow_id: str, url: str, username: str, password: str) -> dict:
     return r2.json()
 
 
-def profile(flow: dict, manifest: dict, no_lo: bool = False) -> dict:
+CUSTOM_MARKERS = ("CustomComponent", "@custom_component", "@langflow_component", "LCModelComponent", "BaseComponent")
+
+
+def node_code(tpl: dict) -> str:
+    code = tpl.get("code")
+    if isinstance(code, dict):
+        code = code.get("value")
+    return code if isinstance(code, str) else ""
+
+
+def top_level_imports(code: str) -> set[str]:
+    """AST-разбор кода ноды -> множество top-level импортируемых модулей."""
+    import ast
+
+    mods: set[str] = set()
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return mods
+    for item in ast.walk(tree):
+        if isinstance(item, ast.Import):
+            for a in item.names:
+                mods.add(a.name.split(".")[0])
+        elif isinstance(item, ast.ImportFrom):
+            if item.module and item.level == 0:
+                mods.add(item.module.split(".")[0])
+    return mods
+
+
+def analyze_custom_nodes(flow: dict, manifest: dict, unknown: list[str], export_dir: Path | None) -> dict:
+    """Для flow-only кастомных нод: экспорт кода в .py + анализ импортов.
+
+    Возвращает dict для профиля: custom_components, custom_imports,
+    forced_keep (фичи, которые нельзя вычитать из-за импортов), warnings.
+    """
+    import_map = manifest.get("import_map", {})
+    features = manifest["features"]
+    codes: dict[str, str] = {}
+    for n in flow.get("data", {}).get("nodes", []) or []:
+        d = n.get("data", {})
+        t = norm_type(d.get("type", ""))
+        if t in unknown:
+            code = node_code(node_template(n))
+            if code and any(m in code for m in CUSTOM_MARKERS):
+                codes[t] = code
+
+    exported: dict[str, str] = {}
+    imports: set[str] = set()
+    warnings: list[str] = []
+    forced_keep: set[str] = set()
+    pip_keep: set[str] = set()
+
+    for t, code in sorted(codes.items()):
+        if export_dir is not None:
+            export_dir.mkdir(parents=True, exist_ok=True)
+            fn = export_dir / f"{t}.py"
+            fn.write_text(code)
+            exported[t] = str(fn)
+        for m in top_level_imports(code):
+            imports.add(m)
+            if m in ("_vllm_tyk_lib", "custom_components"):
+                continue  # наши baked-модули, всегда в образе
+            mapped = import_map.get(m, "??")
+            if mapped == "??":
+                warnings.append(f"{t}: импорт '{m}' не в import_map — пакет не будет удалён только если он не в pip_remove; проверьте вручную")
+                continue
+            if not mapped:
+                continue  # базовый пакет (httpx/pydantic/...)
+            pip_keep.add(mapped)
+            for fname, spec in features.items():
+                if mapped in spec.get("pip", []):
+                    forced_keep.add(fname)
+
+    return {
+        "custom_components": exported,
+        "custom_imports": sorted(imports),
+        "forced_keep": sorted(forced_keep),
+        "pip_keep": sorted(pip_keep),
+        "custom_warnings": warnings,
+    }
+
+
+def profile(flow: dict, manifest: dict, no_lo: bool = False, export_dir: Path | None = None) -> dict:
     nodes = flow.get("data", {}).get("nodes", []) or []
     types, fields = [], []
     for n in nodes:
@@ -114,6 +196,20 @@ def profile(flow: dict, manifest: dict, no_lo: bool = False) -> dict:
                 keep.add("ocr_rapidocr")
                 reasons.setdefault("ocr_rapidocr", []).append("ocr_engine unset -> docling default auto")
 
+    known = {norm_type(x) for x in manifest.get("known_base_types", [])}
+    known |= {norm_type(x) for x in manifest.get("base_custom_types", [])}
+    feat_types = {norm_type(m) for s in features.values() for m in s.get("match_types", [])}
+    unknown = sorted({t for t in types if t and not any(k in t or t in k for k in known | feat_types)})
+
+    # flow-only custom nodes: export code + analyze imports
+    custom = analyze_custom_nodes(flow, manifest, unknown, export_dir)
+    for t in custom["custom_components"]:
+        if t in unknown:
+            unknown.remove(t)  # экспортирован и проанализирован — не требует ручного ревью
+    for f in custom["forced_keep"]:
+        keep.add(f)
+        reasons.setdefault(f, []).append("custom node imports")
+
     remove = [f for f in features if f not in keep]
     pip_remove, paths_remove = [], []
     for f in remove:
@@ -124,10 +220,8 @@ def profile(flow: dict, manifest: dict, no_lo: bool = False) -> dict:
     for f in keep:
         kept_paths.update(features[f].get("paths", []))
     paths_remove = [p for p in paths_remove if not any(p != k and (p in k or k in p) for k in kept_paths)]
-
-    known = {norm_type(x) for x in manifest.get("known_base_types", [])}
-    feat_types = {norm_type(m) for s in features.values() for m in s.get("match_types", [])}
-    unknown = sorted({t for t in types if t and not any(k in t or t in k for k in known | feat_types)})
+    # packages required by custom node code must survive subtraction
+    pip_remove = [p for p in pip_remove if p not in custom["pip_keep"]]
 
     return {
         "flow_name": flow.get("name", ""),
@@ -138,6 +232,8 @@ def profile(flow: dict, manifest: dict, no_lo: bool = False) -> dict:
         "paths_remove": sorted(set(paths_remove)),
         "unknown_types": unknown,
         "reasons": reasons,
+        **custom,
+        "components_dir": str(export_dir) if (export_dir and custom["custom_components"]) else None,
     }
 
 
@@ -152,6 +248,7 @@ def main() -> int:
     ap.add_argument("--json", dest="json_out", help="write machine-readable profile")
     ap.add_argument("--strict", action="store_true", help="fail on unknown component types")
     ap.add_argument("--no-lo", action="store_true", help="drop LibreOffice even if Docling present")
+    ap.add_argument("--export-dir", help="куда экспортировать код flow-only кастомных нод (default: lfx_components рядом с --json)")
     args = ap.parse_args()
 
     if args.file:
@@ -161,8 +258,15 @@ def main() -> int:
     else:
         ap.error("need --file or --flow + --username/--password")
 
+    if args.export_dir:
+        export_dir = Path(args.export_dir)
+    elif args.json_out:
+        export_dir = Path(args.json_out).parent / "lfx_components"
+    else:
+        export_dir = None
+
     manifest = json.loads(Path(args.manifest).read_text())
-    prof = profile(flow, manifest, no_lo=args.no_lo)
+    prof = profile(flow, manifest, no_lo=args.no_lo, export_dir=export_dir)
 
     print(f"Flow: {prof['flow_name']}  ({len(prof['nodes'])} node types)")
     print("Nodes:  ", ", ".join(prof["nodes"]))
@@ -172,6 +276,15 @@ def main() -> int:
     print("REMOVE: ", ", ".join(prof["remove"]))
     print("  pip:   ", ", ".join(prof["pip_remove"]) or "—")
     print("  paths: ", ", ".join(prof["paths_remove"]) or "—")
+    if prof["custom_components"]:
+        print("CUSTOM (flow-only, экспортировано):")
+        for t, fn in prof["custom_components"].items():
+            print(f"   - {t} -> {fn}")
+        print("  imports:", ", ".join(prof["custom_imports"]))
+        if prof["forced_keep"]:
+            print("  forced KEEP из-за импортов:", ", ".join(prof["forced_keep"]))
+    for w in prof["custom_warnings"]:
+        print("  WARN:", w)
     if prof["unknown_types"]:
         print("UNKNOWN component types (kept base, review!):", ", ".join(prof["unknown_types"]))
     if args.json_out:

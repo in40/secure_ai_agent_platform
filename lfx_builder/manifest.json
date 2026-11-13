@@ -61,6 +61,30 @@
     "qdrant", "sqlconnector", "apiretriever", "conditionalrouter", "subworkflow",
     "veriagent", "chatsession", "storemessage", "getmessage", "advancedprompt",
     "languagemodelcomponent", "doclingremotecomponent", "chatinputcomponent",
-    "chatoutputcomponent", "parsercomponent", "webhook", "receive", "sendhttprequest"
-  ]
+    "chatoutputcomponent", "parsercomponent", "webhook", "receive", "sendhttprequest",
+    "note", "calculatorcomponent", "agent", "urlcomponent", "multilineinput",
+    "textinput", "booleaninput", "dropdown", "tablecomponent", "dataframe",
+    "documentprompt", "loopcomponent", "mcptools", "recursivecharactertextsplitter",
+    "typeconvertercomponent", "vllmmodel", "splittextcomponent", "filterdataframe",
+    "sqlconnectorcomponent", "watchfile"
+  ],
+  "base_custom_types": [
+    "tykvllmmodel", "doclingremote", "uploadedfile", "pdfplumbercomponent",
+    "chatinputrouter", "veriagentinputguard", "veriagenttoolguard", "veriagentgroundingguard"
+  ],
+  "import_map": {
+    "httpx": "", "openai": "", "langflow": "", "lfx": "", "langchain": "",
+    "langchain_core": "", "langchain_openai": "", "pydantic": "", "pydantic_settings": "",
+    "loguru": "", "fastapi": "", "starlette": "", "jinja2": "", "yaml": "", "dotenv": "",
+    "docling": "docling", "docling_core": "docling-core", "torch": "torch", "torchvision": "torch",
+    "transformers": "transformers", "easyocr": "easyocr", "tesserocr": "tesserocr",
+    "rapidocr": "rapidocr", "rapidocr_onnxruntime": "rapidocr-onnxruntime", "onnxruntime": "onnxruntime",
+    "pdfplumber": "pdfplumber", "pdfminer": "pdfminer.six", "neo4j": "neo4j",
+    "calamine": "python-calamine", "cv2": "opencv-python-headless", "PIL": "pillow",
+    "fitz": "pymupdf", "pymupdf": "pymupdf", "bs4": "beautifulsoup4", "docx": "python-docx",
+    "openpyxl": "openpyxl", "pandas": "pandas", "numpy": "numpy", "requests": "requests",
+    "sklearn": "scikit-learn", "scipy": "scipy", "matplotlib": "matplotlib",
+    "pptx": "python-pptx", "reportlab": "reportlab", "markdown": "", "sqlalchemy": "",
+    "psycopg": "", "psycopg2": "", "boto3": "", "google": "", "azure": "", "mistralai": ""
+  }
 }

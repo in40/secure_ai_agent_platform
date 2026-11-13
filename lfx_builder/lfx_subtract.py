@@ -78,6 +78,15 @@ def build(prof: dict, args, tag: str) -> None:
             run(["docker", "exec", "--user", "root", cname, args.venv_pip, "uninstall", "-y", *pip_rm])
         if path_rm:
             run(["docker", "exec", "--user", "root", cname, "rm", "-rf", *path_rm])
+        # flow-only custom components -> в запекаемый каталог компонентов
+        comp_dir = args.components_dir or prof.get("components_dir")
+        if comp_dir:
+            cd = Path(comp_dir)
+            pys = sorted(cd.glob("*.py")) if cd.is_dir() else []
+            for py in pys:
+                run(["docker", "cp", str(py), f"{cname}:/app/custom_components/{py.name}"])
+            if pys:
+                print(f"baked {len(pys)} custom component(s) from {cd}")
         run(["docker", "exec", "--user", "root", cname, "sh", "-c",
              "rm -rf /root/.cache /home/*/.cache /app/.npm /var/cache/* 2>/dev/null; "
              "/app/.venv/bin/pip cache purge 2>/dev/null; true"])
@@ -111,6 +120,7 @@ def main() -> int:
     ap.add_argument("--base", default="aso9864/langflow-v2:1.0.28")
     ap.add_argument("--tag", default=None, help="default: lfx-<flow-name>:latest")
     ap.add_argument("--gen-changes", default=str(HERE / "gen_changes.py"))
+    ap.add_argument("--components-dir", default=None, help="папка .py для запекания в /app/custom_components (default: из профиля)")
     ap.add_argument("--venv-pip", default="/app/.venv/bin/pip")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--smoke", action="store_true", help="start resulting image and hit /health")
