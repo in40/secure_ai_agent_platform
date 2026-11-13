@@ -52,6 +52,13 @@ EXPOSE 7860
 
 # Custom components
 COPY custom_components/ /app/custom_components/
+# _vllm_tyk_lib не должна лежать в сканируемом Langflow каталоге компонентов:
+# выносим библиотеку наружу и чистим кэши до сканирования.
+USER root
+RUN mv /app/custom_components/_vllm_tyk_lib /app/_vllm_tyk_lib \
+    && rm -rf /app/custom_components/__pycache__ /app/custom_components/*/__pycache__ \
+              /app/custom_components/**/*.pyc
+USER user
 ENV LANGFLOW_COMPONENTS_PATH=/app/custom_components
 
 # EasyOCR models (craft detection + recognition incl. cyrillic) for offline OCR
@@ -71,4 +78,4 @@ COPY patched_lfx_schemas.py /app/.venv/lib/python3.14/site-packages/lfx/utils/sc
 COPY patched_langflow_schemas.py /app/.venv/lib/python3.14/site-packages/langflow/utils/schemas.py
 COPY patched_main.py /app/.venv/lib/python3.14/site-packages/langflow/main.py
 COPY simpleui/ /app/simpleui/
-ENV PYTHONPATH=/app/custom_components
+ENV PYTHONPATH=/app:/app/_vllm_tyk_lib:/app/custom_components
