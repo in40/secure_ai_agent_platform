@@ -39,6 +39,26 @@ def wait_health(timeout_s: int = 240) -> None:
     sys.exit("[lfx_init] langflow не поднялся за время ожидания")
 
 
+def wait_services(timeout_s: int = 300) -> None:
+    """Ждём готовности локальных сервисов (эмбеддер отвечает на /models)."""
+    checks = [
+        "http://127.0.0.1:6333/healthz",
+        "http://127.0.0.1:8081/v1/models",
+        "http://127.0.0.1:8082/v1/models",
+    ]
+    deadline = time.time() + timeout_s
+    for url in checks:
+        while time.time() < deadline:
+            try:
+                if httpx.get(url, timeout=5).status_code < 400:
+                    break
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(2)
+        else:
+            log(f"WARN: сервис {url} не подтверждён за {timeout_s}s")
+
+
 def login() -> str:
     user = os.environ.get("LANGFLOW_SUPERUSER", "admin")
     pw = os.environ.get("LANGFLOW_SUPERUSER_PASSWORD", "")
@@ -93,6 +113,42 @@ def import_flow(h: dict) -> str | None:
     return fid
 
 
+def _set_field(tpl: dict, field: str, value) -> None:
+    f = tpl.setdefault(field, {"type": "str", "value": None})
+    if isinstance(f, dict):
+        f["value"] = value
+
+
+def patch_service_urls(h: dict) -> None:
+    """Локальные сервисы LFX: переводим URL нод на 127.0.0.1 (см. RUNTIME_SERVICES.md)."""
+    mapping = {
+        "embeddingmodel": ("api_base", os.environ.get("LFX_EMBED_URL", "http://127.0.0.1:8081/v1")),
+        "rerankcomponent": ("rerank_url", os.environ.get("LFX_RERANK_URL", "http://127.0.0.1:8082/v1/rerank")),
+        "qdrant": ("url", os.environ.get("LFX_QDRANT_URL", "http://127.0.0.1:6333")),
+    }
+    flows = httpx.get(f"{BASE}/api/v1/flows/", headers=h, timeout=30).json()
+    for f in flows if isinstance(flows, list) else flows.get("flows", []):
+        fid = f.get("id")
+        det = httpx.get(f"{BASE}/api/v1/flows/{fid}", headers=h, timeout=30).json()
+        nodes = (det.get("data") or {}).get("nodes", [])
+        changed = 0
+        for n in nodes:
+            dd = n.get("data", {})
+            t = (dd.get("type") or "").lower()
+            for needle, (field, url) in mapping.items():
+                if needle in t:
+                    _set_field(dd.setdefault("template", {}), field, url)
+                    changed += 1
+        if changed:
+            r = httpx.put(
+                f"{BASE}/api/v1/flows/{fid}",
+                headers=h,
+                json={"name": det.get("name"), "description": det.get("description"), "data": det.get("data")},
+                timeout=60,
+            )
+            log(f"flow {fid}: URL локальных сервисов проставлены ({changed} нод) -> HTTP {r.status_code}")
+
+
 def patch_llm_nodes(h: dict) -> None:
     provider = os.environ.get("LFX_LLM_PROVIDER", "OpenAI Compatible")
     model = os.environ.get("LFX_LLM_MODEL", "")
@@ -133,6 +189,9 @@ def main() -> None:
     if os.environ.get("LFX_LLM_API_KEY"):
         upsert_variable(h, "OPENAI_COMPATIBLE_API_KEY", os.environ["LFX_LLM_API_KEY"])
     import_flow(h)
+    if os.path.exists("/app/lfx/bin/qdrant"):
+        wait_services()
+        patch_service_urls(h)
     patch_llm_nodes(h)
     log("готово")
 

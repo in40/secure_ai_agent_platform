@@ -201,6 +201,17 @@ def profile(flow: dict, manifest: dict, no_lo: bool = False, export_dir: Path | 
     feat_types = {norm_type(m) for s in features.values() for m in s.get("match_types", [])}
     unknown = sorted({t for t in types if t and not any(k in t or t in k for k in known | feat_types)})
 
+    # какие локальные сервисы потребуются (см. RUNTIME_SERVICES.md)
+    services = []
+    for sname, sspec in (manifest.get("services") or {}).items():
+        if sname.startswith("_"):
+            continue
+        for m in sspec.get("match_types", []):
+            nm = norm_type(m)
+            if any(nm in t or t in nm for t in types):
+                services.append(sname)
+                break
+
     # flow-only custom nodes: export code + analyze imports
     custom = analyze_custom_nodes(flow, manifest, unknown, export_dir)
     for t in custom["custom_components"]:
@@ -231,6 +242,7 @@ def profile(flow: dict, manifest: dict, no_lo: bool = False, export_dir: Path | 
         "pip_remove": sorted(set(pip_remove)),
         "paths_remove": sorted(set(paths_remove)),
         "unknown_types": unknown,
+        "services": services,
         "reasons": reasons,
         **custom,
         "components_dir": str(export_dir) if (export_dir and custom["custom_components"]) else None,
@@ -274,6 +286,8 @@ def main() -> int:
     for f, why in prof["reasons"].items():
         print(f"   + {f}: {'; '.join(why)}")
     print("REMOVE: ", ", ".join(prof["remove"]))
+    if prof.get("services"):
+        print("SERVICES (локальные сервисы для автономности):", ", ".join(prof["services"]), "— см. RUNTIME_SERVICES.md")
     print("  pip:   ", ", ".join(prof["pip_remove"]) or "—")
     print("  paths: ", ", ".join(prof["paths_remove"]) or "—")
     if prof["custom_components"]:

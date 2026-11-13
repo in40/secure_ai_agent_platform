@@ -73,6 +73,12 @@
     "typeconvertercomponent", "vllmmodel", "splittextcomponent", "filterdataframe",
     "sqlconnectorcomponent", "watchfile"
   ],
+  "services": {
+    "_note": "см. RUNTIME_SERVICES.md — сопоставление 'нода flow → локальный сервис в LFX'",
+    "qdrant":   {"match_types": ["qdrant"], "port": 6333, "mode": "in-memory по умолчанию"},
+    "embedder": {"match_types": ["embeddingmodel"], "port": 8081, "model": "user-bge-m3-q8_0.gguf (совпадать с индексом!)"},
+    "reranker": {"match_types": ["rerankcomponent"], "port": 8082, "model": "bge-reranker-v2-m3-Q4_K_M.gguf (stateless)"}
+  },
   "base_custom_types": [
     "tykvllmmodel", "doclingremote", "uploadedfile", "pdfplumbercomponent",
     "chatinputrouter", "veriagentinputguard", "veriagenttoolguard", "veriagentgroundingguard"

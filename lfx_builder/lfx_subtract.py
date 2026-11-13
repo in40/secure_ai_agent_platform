@@ -98,6 +98,15 @@ def build(prof: dict, args, tag: str) -> None:
             run(["docker", "cp", str(HERE / "lfx_entrypoint.sh"), f"{cname}:/app/lfx/entrypoint.sh"])
             run(["docker", "exec", "--user", "root", cname, "chmod", "+x", "/app/lfx/entrypoint.sh"])
             print("baked LFX init/entrypoint (LLM настраивается из env)")
+        if args.local_services:
+            svc = Path(args.local_services)
+            for sub in ("bin", "lib", "models"):
+                src = svc / sub
+                if src.is_dir() and any(src.iterdir()):
+                    run(["docker", "exec", "--user", "root", cname, "mkdir", "-p", f"/app/lfx/{sub}"])
+                    for item in sorted(src.iterdir()):
+                        run(["docker", "cp", str(item), f"{cname}:/app/lfx/{sub}/{item.name}"])
+                    print(f"local services: {sub}/ запечено ({len(list(src.iterdir()))} файлов)")
         if args.no_ui:
             run(["docker", "exec", "--user", "root", cname, "sh", "-c",
                  "D=$(ls -d /app/.venv/lib/python*/site-packages/langflow/frontend 2>/dev/null); "
@@ -147,6 +156,8 @@ def main() -> int:
     ap.add_argument("--components-dir", default=None, help="папка .py для запекания в /app/custom_components (default: из профиля)")
     ap.add_argument("--flow-json", default=None, help="flow JSON для запекания в /app/lfx/flow.json (авто-импорт при старте)")
     ap.add_argument("--llm-env", action="store_true", help="запечь lfx_init+entrypoint: провайдер/модель LLM из env при старте")
+    ap.add_argument("--local-services", default=None, metavar="DIR",
+                    help="папка с bin/ lib/ models/ (llama-server, qdrant, GGUF) — запечь и поднять в контейнере")
     ap.add_argument("--no-ui", action="store_true", help="удалить frontend-ассеты и simpleui (чистый API-runtime)")
     ap.add_argument("--venv-pip", default="/app/.venv/bin/pip")
     ap.add_argument("--dry-run", action="store_true")
