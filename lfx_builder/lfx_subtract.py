@@ -100,8 +100,12 @@ def build(prof: dict, args, tag: str) -> None:
             print("baked LFX init/entrypoint (LLM настраивается из env)")
         if args.no_ui:
             run(["docker", "exec", "--user", "root", cname, "sh", "-c",
-                 "rm -rf /app/.venv/lib/python*/site-packages/langflow/frontend/assets/* /app/simpleui 2>/dev/null; true"])
-            print("UI удалён (frontend assets + simpleui)")
+                 "D=$(ls -d /app/.venv/lib/python*/site-packages/langflow/frontend 2>/dev/null); "
+                 "rm -rf $D/assets $D/icons; rm -f $D/*.js $D/*.css $D/*.ico $D/*.json; "
+                 "printf '<!doctype html><html><head><title>LFX</title></head><body>LFX API runtime — UI отключён. "
+                 "API: /api/v1/run/&lt;flow_id&gt; (заголовок x-api-key)</body></html>' > $D/index.html; "
+                 "rm -rf /app/simpleui; true"])
+            print("UI заменён заглушкой (index.html stub, ассеты удалены)")
         run(["docker", "exec", "--user", "root", cname, "sh", "-c",
              "rm -rf /root/.cache /home/*/.cache /app/.npm /var/cache/* 2>/dev/null; "
              "/app/.venv/bin/pip cache purge 2>/dev/null; true"])

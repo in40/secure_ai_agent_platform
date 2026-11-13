@@ -52,6 +52,11 @@
       "description": "uv build cache (never needed at runtime)",
       "paths": ["/app/data/.cache/uv"],
       "always_remove": true
+    },
+    "other_providers": {
+      "description": "SDK провайдеров, которых нет в flow: IBM/watsonx, Google, Azure, AWS, Anthropic, Cohere, Mistral, Ollama, Slack, Groq + pyright",
+      "pip": ["anthropic", "azure-ai-contentsafety", "azure-ai-contentunderstanding", "azure-ai-projects", "azure-core", "azure-identity", "azure-search-documents", "azure-storage-blob", "msal", "msal-extensions", "boto3", "boto3-stubs", "botocore", "botocore-stubs", "cohere", "google-api-core", "google-api-python-client", "google-auth", "google-auth-httplib2", "google-auth-oauthlib", "google-cloud-bigquery", "google-cloud-core", "google-cloud-modelarmor", "google-crc32c", "google-genai", "google-resumable-media", "ibm-cloud-sdk-core", "ibm-cos-sdk", "ibm-cos-sdk-core", "ibm-cos-sdk-s3transfer", "clidriver", "watsonx-ai", "ollama", "slack-sdk", "mistralai", "groq", "pyright"],
+      "match_types": ["amazon", "bedrock", "sagemaker", "google", "gemini", "vertex", "azure", "ai_foundry", "watsonx", "ibm", "anthropic", "claude", "slack", "ollama", "openrouter", "mistral", "cohere", "groq"]
     }
   },
   "known_base_types": [

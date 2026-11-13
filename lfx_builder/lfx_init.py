@@ -64,7 +64,9 @@ def upsert_variable(h: dict, name: str, value: str) -> None:
     existing = httpx.get(f"{BASE}/api/v1/variables/", headers=h, timeout=20).json()
     for v in existing:
         if v.get("name") == name and v.get("type") == "Credential":
-            r = httpx.patch(f"{BASE}/api/v1/variables/{v['id']}", headers=h, json=payload, timeout=20)
+            body = dict(payload)
+            body["id"] = v["id"]
+            r = httpx.patch(f"{BASE}/api/v1/variables/{v['id']}", headers=h, json=body, timeout=20)
             log(f"variable {name}: обновлена ({r.status_code})")
             return
     r = httpx.post(f"{BASE}/api/v1/variables/", headers=h, json=payload, timeout=20)
