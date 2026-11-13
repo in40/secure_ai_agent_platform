@@ -66,6 +66,27 @@ def _model_needs_no_think(model_name: str) -> bool:
     return "Qwen3" in model_name
 
 
+def _extract_text(value) -> str:
+    """Достаёт текст из Message/list/dict/str.
+
+    В этой версии lfx str(Message) возвращает JSON всего объекта
+    (text, files, flow_id, state...), поэтому str() здесь недопустим.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, Message):
+        return value.text or ""
+    if isinstance(value, dict):
+        t = value.get("text")
+        return t if isinstance(t, str) else str(value)
+    if isinstance(value, (list, tuple)):
+        return "\n".join(p for p in (_extract_text(v) for v in value) if p)
+    t = getattr(value, "text", None)
+    return t if isinstance(t, str) else str(value)
+
+
 class TykVLLMModelComponent(LCModelComponent):
     display_name = "TYK vLLM Model"
     description = "vLLM через Tyk/EPA; модель выбирается из двух захардкоженных."
@@ -101,8 +122,8 @@ class TykVLLMModelComponent(LCModelComponent):
     async def text_response(self) -> Message:
         settings = get_vllm_tyk_settings()
         model_name = str(self.model_name or MODEL_CHOICES[0]).strip()
-        input_text = vllm_call.apply_no_think_prompt(str(self.input_value or "").strip())
-        system_text = str(self.system_message or "").strip()
+        input_text = vllm_call.apply_no_think_prompt(_extract_text(self.input_value).strip())
+        system_text = _extract_text(self.system_message).strip()
         logger.info(
             "TykVLLMModel: запрос",
             model=model_name,
