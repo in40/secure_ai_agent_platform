@@ -87,6 +87,21 @@ def build(prof: dict, args, tag: str) -> None:
                 run(["docker", "cp", str(py), f"{cname}:/app/custom_components/{py.name}"])
             if pys:
                 print(f"baked {len(pys)} custom component(s) from {cd}")
+        # LFX-runtime: flow + init + entrypoint + (опц.) удаление UI
+        if args.flow_json:
+            run(["docker", "exec", "--user", "root", cname, "mkdir", "-p", "/app/lfx"])
+            run(["docker", "cp", args.flow_json, f"{cname}:/app/lfx/flow.json"])
+            print(f"baked flow: {args.flow_json} -> /app/lfx/flow.json")
+        if args.llm_env:
+            run(["docker", "exec", "--user", "root", cname, "mkdir", "-p", "/app/lfx"])
+            run(["docker", "cp", str(HERE / "lfx_init.py"), f"{cname}:/app/lfx/lfx_init.py"])
+            run(["docker", "cp", str(HERE / "lfx_entrypoint.sh"), f"{cname}:/app/lfx/entrypoint.sh"])
+            run(["docker", "exec", "--user", "root", cname, "chmod", "+x", "/app/lfx/entrypoint.sh"])
+            print("baked LFX init/entrypoint (LLM настраивается из env)")
+        if args.no_ui:
+            run(["docker", "exec", "--user", "root", cname, "sh", "-c",
+                 "rm -rf /app/.venv/lib/python*/site-packages/langflow/frontend/assets/* /app/simpleui 2>/dev/null; true"])
+            print("UI удалён (frontend assets + simpleui)")
         run(["docker", "exec", "--user", "root", cname, "sh", "-c",
              "rm -rf /root/.cache /home/*/.cache /app/.npm /var/cache/* 2>/dev/null; "
              "/app/.venv/bin/pip cache purge 2>/dev/null; true"])
@@ -97,6 +112,11 @@ def build(prof: dict, args, tag: str) -> None:
             raise SystemExit(f"gen_changes.py not found at {gen} (needed to preserve image Config)")
         changes = run(f"docker inspect -f '{{{{json .Config}}}}' {args.base} | python3 {gen}")
         change_args = changes.splitlines()
+        if args.llm_env or args.flow_json:
+            for i, a in enumerate(change_args):
+                if a.startswith("CMD "):
+                    change_args[i] = 'CMD ["/app/lfx/entrypoint.sh"]'
+                    print("CMD overridden -> /app/lfx/entrypoint.sh")
         print(f"config changes: {len(change_args)} args")
 
         export = subprocess.Popen(["docker", "export", cname], stdout=subprocess.PIPE)
@@ -121,6 +141,9 @@ def main() -> int:
     ap.add_argument("--tag", default=None, help="default: lfx-<flow-name>:latest")
     ap.add_argument("--gen-changes", default=str(HERE / "gen_changes.py"))
     ap.add_argument("--components-dir", default=None, help="папка .py для запекания в /app/custom_components (default: из профиля)")
+    ap.add_argument("--flow-json", default=None, help="flow JSON для запекания в /app/lfx/flow.json (авто-импорт при старте)")
+    ap.add_argument("--llm-env", action="store_true", help="запечь lfx_init+entrypoint: провайдер/модель LLM из env при старте")
+    ap.add_argument("--no-ui", action="store_true", help="удалить frontend-ассеты и simpleui (чистый API-runtime)")
     ap.add_argument("--venv-pip", default="/app/.venv/bin/pip")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--smoke", action="store_true", help="start resulting image and hit /health")
