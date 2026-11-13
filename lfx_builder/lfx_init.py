@@ -121,11 +121,8 @@ def _set_field(tpl: dict, field: str, value) -> None:
 
 def patch_service_urls(h: dict) -> None:
     """Локальные сервисы LFX: переводим URL нод на 127.0.0.1 (см. RUNTIME_SERVICES.md)."""
-    mapping = {
-        "embeddingmodel": ("api_base", os.environ.get("LFX_EMBED_URL", "http://127.0.0.1:8081/v1")),
-        "rerankcomponent": ("rerank_url", os.environ.get("LFX_RERANK_URL", "http://127.0.0.1:8082/v1/rerank")),
-        "qdrant": ("url", os.environ.get("LFX_QDRANT_URL", "http://127.0.0.1:6333")),
-    }
+    embed_url = os.environ.get("LFX_EMBED_URL", "http://127.0.0.1:8081/v1")
+    embed_model = os.environ.get("LFX_EMBED_MODEL_NAME", "user-bge-m3-q8_0")
     flows = httpx.get(f"{BASE}/api/v1/flows/", headers=h, timeout=30).json()
     for f in flows if isinstance(flows, list) else flows.get("flows", []):
         fid = f.get("id")
@@ -135,10 +132,37 @@ def patch_service_urls(h: dict) -> None:
         for n in nodes:
             dd = n.get("data", {})
             t = (dd.get("type") or "").lower()
-            for needle, (field, url) in mapping.items():
-                if needle in t:
-                    _set_field(dd.setdefault("template", {}), field, url)
-                    changed += 1
+            tpl = dd.setdefault("template", {})
+            if "embeddingmodel" in t:
+                # provider пуст -> компонент берёт глобальную модель по умолчанию (OpenAI) и игнорит api_base.
+                # ВАЖНО: "OpenAI Compatible" не зарегистрирован в EMBEDDING_PROVIDER_CLASS_MAPPING —
+                # без metadata.embedding_class/param_mapping get_embeddings падает. Скалярный api_base
+                # применяется только когда provider selection == provider ноды. См. RUNTIME_SERVICES.md.
+                _set_field(tpl, "api_base", embed_url)
+                _set_field(tpl, "provider", "OpenAI Compatible")
+                _set_field(tpl, "model_name", embed_model)
+                _set_field(tpl, "model", [{
+                    "id": f"OpenAI Compatible/{embed_model}",
+                    "name": embed_model,
+                    "provider": "OpenAI Compatible",
+                    "category": "OpenAI Compatible",
+                    "metadata": {
+                        "embedding_class": "OpenAIEmbeddings",
+                        "param_mapping": {
+                            "model": "model", "api_key": "api_key", "api_base": "base_url",
+                            "dimensions": "dimensions", "chunk_size": "chunk_size",
+                            "request_timeout": "timeout", "max_retries": "max_retries",
+                            "show_progress_bar": "show_progress_bar", "model_kwargs": "model_kwargs",
+                        },
+                    },
+                }])
+                changed += 1
+            elif "rerankcomponent" in t:
+                _set_field(tpl, "rerank_url", os.environ.get("LFX_RERANK_URL", "http://127.0.0.1:8082/v1/rerank"))
+                changed += 1
+            elif "qdrant" in t:
+                _set_field(tpl, "url", os.environ.get("LFX_QDRANT_URL", "http://127.0.0.1:6333"))
+                changed += 1
         if changed:
             r = httpx.put(
                 f"{BASE}/api/v1/flows/{fid}",

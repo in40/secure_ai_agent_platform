@@ -28,3 +28,19 @@
 - llama.cpp GGUF q8: embed ~0.4s, RAM пары ~1.6GB — выбранный вариант
 - sentence-transformers fp16 (альтернатива): embed 1.0s, rerank8 5.4s, RAM 5.4GB — отклонено
 - qdrant in-memory: RAM ~0.3GB на малые коллекции
+
+## Грабли EmbeddingModel + «OpenAI Compatible» (проверено на lfx 1.0.29)
+- Скалярные поля `provider`/`model_name`/`api_base` НЕ достаточны: если поле `model`
+  (ModelInput selection) пустое — компонент уходит в глобальную модель по умолчанию
+  (OpenAI → api.openai.com → 403 region). Нужно писать selection-лист в `model`.
+- «OpenAI Compatible» не зарегистрирован в EMBEDDING_PROVIDER_CLASS_MAPPING →
+  selection обязан нести `metadata.embedding_class="OpenAIEmbeddings"` +
+  `metadata.param_mapping` (копия маппинга OpenAI: api_base→base_url и т.д.),
+  иначе ValueError "No embedding class defined in metadata".
+- `api_base` ноды применяется только когда provider selection == provider ноды
+  (use_component_overrides). Иначе берётся глобальная OPENAI_COMPATIBLE_BASE_URL
+  (а она у нас — chat-сервер!).
+- transform_localhost_url переписывает localhost/127.0.0.1 → host.docker.internal
+  только для ГЛОБАЛЬНЫХ переменных провайдера; явный api_base ноды не трогает.
+- Готовая структура selection — в lfx_init.patch_service_urls.
+
