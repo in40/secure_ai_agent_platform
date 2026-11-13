@@ -30,6 +30,11 @@
 - qdrant in-memory: RAM ~0.3GB на малые коллекции
 
 ## Грабли EmbeddingModel + «OpenAI Compatible» (проверено на lfx 1.0.29)
+- **ДВА template в ноде**: `data.template` (верхний уровень, его отдаёт GET /flows) и
+  `data.node.template` (внутри него запечённый код ноды; ЕГО читает загрузчик графа).
+  Патчить поля только по верхнему пути — рантайм продолжит видеть старые значения
+  (симптом: «Connection error» на URL из исходного экспорта, хотя API показывает новые).
+  lfx_init._templates() правит оба.
 - Скалярные поля `provider`/`model_name`/`api_base` НЕ достаточны: если поле `model`
   (ModelInput selection) пустое — компонент уходит в глобальную модель по умолчанию
   (OpenAI → api.openai.com → 403 region). Нужно писать selection-лист в `model`.
@@ -43,4 +48,14 @@
 - transform_localhost_url переписывает localhost/127.0.0.1 → host.docker.internal
   только для ГЛОБАЛЬНЫХ переменных провайдера; явный api_base ноды не трогает.
 - Готовая структура selection — в lfx_init.patch_service_urls.
+
+## Формат /api/v1/run/{flow_id} (langflow 1.0.29, x-api-key)
+- Плоские `{"input": ...}` / `{"input_text": ...}` **игнорируются молча** (нода получает
+  текст из template-дефолта ChatInput — симптом: LLM отвечает на «Hello»).
+- Правильно: `{"input_request": {"input_value": "...", "input_type": "chat",
+  "output_type": "chat", "session_id": "...", "tweaks": {...}}}`.
+- Файл в flow передаётся твиком `ChatInput-<id>.files: ["<flow_id>/<имя_файла>"]`
+  (путь из ответа /api/v1/files/upload).
+- Тестер langflow-rag-tester.html исправлен под этот формат (2026-11-13).
+
 

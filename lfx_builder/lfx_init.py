@@ -119,6 +119,38 @@ def _set_field(tpl: dict, field: str, value) -> None:
         f["value"] = value
 
 
+def _templates(dd: dict) -> list:
+    """В ноде ДВА template: data.template (его отдаёт/принимает API-верхний уровень)
+    и data.node.template (его читает загрузчик графа — там же запечённый код ноды).
+    Патчить надо оба, иначе рантайм видит старые значения."""
+    tpls = [dd.setdefault("template", {})]
+    inner = dd.get("node")
+    if isinstance(inner, dict):
+        tpls.append(inner.setdefault("template", {}))
+    return tpls
+
+
+def _emb_selection(embed_model: str) -> list:
+    # "OpenAI Compatible" не зарегистрирован в EMBEDDING_PROVIDER_CLASS_MAPPING —
+    # без metadata.embedding_class/param_mapping get_embeddings падает. Скалярный
+    # api_base применяется только когда provider selection == provider ноды.
+    return [{
+        "id": f"OpenAI Compatible/{embed_model}",
+        "name": embed_model,
+        "provider": "OpenAI Compatible",
+        "category": "OpenAI Compatible",
+        "metadata": {
+            "embedding_class": "OpenAIEmbeddings",
+            "param_mapping": {
+                "model": "model", "api_key": "api_key", "api_base": "base_url",
+                "dimensions": "dimensions", "chunk_size": "chunk_size",
+                "request_timeout": "timeout", "max_retries": "max_retries",
+                "show_progress_bar": "show_progress_bar", "model_kwargs": "model_kwargs",
+            },
+        },
+    }]
+
+
 def patch_service_urls(h: dict) -> None:
     """Локальные сервисы LFX: переводим URL нод на 127.0.0.1 (см. RUNTIME_SERVICES.md)."""
     embed_url = os.environ.get("LFX_EMBED_URL", "http://127.0.0.1:8081/v1")
@@ -132,36 +164,23 @@ def patch_service_urls(h: dict) -> None:
         for n in nodes:
             dd = n.get("data", {})
             t = (dd.get("type") or "").lower()
-            tpl = dd.setdefault("template", {})
+            fields = None
             if "embeddingmodel" in t:
-                # provider пуст -> компонент берёт глобальную модель по умолчанию (OpenAI) и игнорит api_base.
-                # ВАЖНО: "OpenAI Compatible" не зарегистрирован в EMBEDDING_PROVIDER_CLASS_MAPPING —
-                # без metadata.embedding_class/param_mapping get_embeddings падает. Скалярный api_base
-                # применяется только когда provider selection == provider ноды. См. RUNTIME_SERVICES.md.
-                _set_field(tpl, "api_base", embed_url)
-                _set_field(tpl, "provider", "OpenAI Compatible")
-                _set_field(tpl, "model_name", embed_model)
-                _set_field(tpl, "model", [{
-                    "id": f"OpenAI Compatible/{embed_model}",
-                    "name": embed_model,
+                # provider пуст -> компонент берёт глобальную модель по умолчанию (OpenAI) и игнорит api_base
+                fields = {
+                    "api_base": embed_url,
                     "provider": "OpenAI Compatible",
-                    "category": "OpenAI Compatible",
-                    "metadata": {
-                        "embedding_class": "OpenAIEmbeddings",
-                        "param_mapping": {
-                            "model": "model", "api_key": "api_key", "api_base": "base_url",
-                            "dimensions": "dimensions", "chunk_size": "chunk_size",
-                            "request_timeout": "timeout", "max_retries": "max_retries",
-                            "show_progress_bar": "show_progress_bar", "model_kwargs": "model_kwargs",
-                        },
-                    },
-                }])
-                changed += 1
+                    "model_name": embed_model,
+                    "model": _emb_selection(embed_model),
+                }
             elif "rerankcomponent" in t:
-                _set_field(tpl, "rerank_url", os.environ.get("LFX_RERANK_URL", "http://127.0.0.1:8082/v1/rerank"))
-                changed += 1
+                fields = {"rerank_url": os.environ.get("LFX_RERANK_URL", "http://127.0.0.1:8082/v1/rerank")}
             elif "qdrant" in t:
-                _set_field(tpl, "url", os.environ.get("LFX_QDRANT_URL", "http://127.0.0.1:6333"))
+                fields = {"url": os.environ.get("LFX_QDRANT_URL", "http://127.0.0.1:6333")}
+            if fields:
+                for tpl in _templates(dd):
+                    for k, v in fields.items():
+                        _set_field(tpl, k, v)
                 changed += 1
         if changed:
             r = httpx.put(
@@ -190,9 +209,9 @@ def patch_llm_nodes(h: dict) -> None:
             dd = n.get("data", {})
             if needle not in (dd.get("type") or "").lower():
                 continue
-            tpl = dd.setdefault("template", {})
-            tpl.setdefault("provider", {"type": "str", "value": None})["value"] = provider
-            tpl.setdefault("model_name", {"type": "str", "value": None})["value"] = model
+            for tpl in _templates(dd):
+                tpl.setdefault("provider", {"type": "str", "value": None})["value"] = provider
+                tpl.setdefault("model_name", {"type": "str", "value": None})["value"] = model
             changed += 1
         if changed:
             r = httpx.put(
