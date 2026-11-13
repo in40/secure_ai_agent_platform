@@ -78,4 +78,6 @@ COPY patched_lfx_schemas.py /app/.venv/lib/python3.14/site-packages/lfx/utils/sc
 COPY patched_langflow_schemas.py /app/.venv/lib/python3.14/site-packages/langflow/utils/schemas.py
 COPY patched_main.py /app/.venv/lib/python3.14/site-packages/langflow/main.py
 COPY simpleui/ /app/simpleui/
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 ENV PYTHONPATH=/app:/app/_vllm_tyk_lib:/app/custom_components

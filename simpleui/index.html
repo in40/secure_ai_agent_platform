@@ -35,6 +35,7 @@
   <input id="apikey" type="password" placeholder="API key (sk-...)">
   <button id="loginBtn" title="Войти для списка flow'ов">🔑</button>
   <button id="clearBtn" title="Очистить чат">🗑</button>
+  <span id="ver" class="hint" style="margin-left:auto" title="версия контейнера"></span>
 </header>
 <div id="chat"><div class="meta">Выберите flow, введите API-ключ (Langflow → Settings → API Keys) и напишите сообщение.</div></div>
 <footer>
@@ -245,6 +246,11 @@ $('prompt').addEventListener('keydown', e => {
   }
   loadFlows();
 })();
+
+fetch('/version').then(r=>r.json()).then(v=>{
+  const b=v.base||''; const short=b.includes('Astra')?'Astra SE':(b.includes('Red Hat')||b.includes('Rocky')?'Rocky':b);
+  document.getElementById('ver').textContent=`v${v.build} · ${short} · lf ${v.langflow}`;
+}).catch(()=>{});
 </script>
 </body>
 </html>

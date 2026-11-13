@@ -72,6 +72,8 @@ COPY simpleui/ /app/simpleui/
 RUN chown -R 1000:0 /app
 USER user
 
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 ENV PYTHONPATH=/app:/app/_vllm_tyk_lib:/app/custom_components \
     LANGFLOW_HOST=0.0.0.0 \
     LANGFLOW_AUTO_LOGIN=False \

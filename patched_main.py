@@ -1342,6 +1342,27 @@ def create_app():
 
         return FileResponse("/app/simpleui/index.html", headers={"Cache-Control": "no-store"})
 
+    @app.get("/version", include_in_schema=False)
+    async def _version():
+        import os as _os
+        from importlib.metadata import version as _pkg_version
+
+        from fastapi.responses import JSONResponse
+
+        base = "unknown"
+        try:
+            for _line in open("/etc/os-release", encoding="utf-8"):
+                if _line.startswith("PRETTY_NAME="):
+                    base = _line.split("=", 1)[1].strip().strip('"')
+                    break
+        except OSError:
+            pass
+        try:
+            lf = _pkg_version("langflow")
+        except Exception:  # noqa: BLE001
+            lf = "?"
+        return JSONResponse({"build": _os.environ.get("APP_VERSION", "dev"), "base": base, "langflow": lf})
+
     return app
 
 
