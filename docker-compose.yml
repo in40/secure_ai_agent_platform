@@ -1,18 +1,16 @@
+version: '3.8'
 services:
   langflow:
-    image: aso9864/langflow-v2:1.0.28
+    image: aso9864/langflow-v2:1.0.29-astra
     env_file:
     - secrets.env
     container_name: langflow-v2
-    mem_limit: 4g
     ports:
     - 7861:7860
     environment:
     - LANGFLOW_HOST=0.0.0.0
     - LANGFLOW_PORT=7860
-    - LANGFLOW_WORKERS=1
-    - OMP_NUM_THREADS=4
-    - MKL_NUM_THREADS=4
+    - LANGFLOW_WORKERS=4
     - LANGFLOW_CONFIG_DIR=/app/langflow
     - LANGFLOW_AUTO_LOGIN=False
     - LANGFLOW_SUPERUSER=sorokin
@@ -25,9 +23,13 @@ services:
     - OTEL_SERVICE_NAME=langflow-v2
     - OTEL_EXPORTER_OTLP_TIMEOUT=30000
     - OTEL_PYTHON_LOG_CORRELATION=true
+    - OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic YWRtaW5AZXhhbXBsZS5jb206T3Blbk9icyEyMDI2
     - LANGFLOW_DANGEROUSLY_ALLOW_MULTI_WORKER_WITHOUT_SHARED_QUEUE=true
     - LANGFLOW_OTEL_LOG_BODIES=all
     - LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY=true
+    - LANGFLOW_SKIP_MCP_AUTO_INIT=true
+    - LANGFLOW_MCP_SERVER_ALLOWED_PACKAGES=
+    - LANGFLOW_MCP_SERVERS_LOCKED=true
     - VERIAGENT_JUDGE_URL=https://chat.sorokinonline.com/v1/chat/completions
     - VERIAGENT_JUDGE_MODEL=qwen3.5-122b
     volumes:
@@ -39,17 +41,6 @@ services:
     - langflow-v2_default
     - docling_default
     restart: unless-stopped
-  # ВРЕМЕННО ОТКЛЮЧЕН — ждёт согласования ИБ (отдельный контейнер-сервис).
-  # Разрешить после одобрения; langflow 1.0.28 уже содержит ноду DoclingRemote для неё.
-  # docling-serve:
-  #   image: aso9864/docling-serve-cpu:1.0.29
-  #   container_name: docling-serve
-  #   mem_limit: 8g
-  #   environment:
-  #   - DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1
-  #   networks:
-  #   - langflow-v2_default
-  #   restart: unless-stopped
   postgres:
     image: postgres:16
     container_name: langflow-v2-postgres
