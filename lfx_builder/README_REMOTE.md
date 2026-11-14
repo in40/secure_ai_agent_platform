@@ -7,7 +7,7 @@ LFX = самодостаточный runtime одного flow: базовый �
 
 ## Что понадобится на remote
 Поставка — **только образы с Docker Hub** (git remote недоступен):
-- `aso9864/langflow-v2:1.0.30-astra` (~8.4GB) — база + **LFX-тулкит уже внутри** (`/opt/lfx_builder`);
+- `aso9864/langflow-v2:1.0.29-astra4` (~8.4GB) — база + **LFX-тулкит уже внутри** (`/opt/lfx_builder`);
 - `aso9864/lfx-svc:1.0.0` (~250MB) — бинарники llama-server(CPU)+qdrant, без моделей;
 - docker + python3 на хосте remote;
 - экспорт flow JSON (Settings → Export, из их langflow версии 1.13.x/нашей сборки);
@@ -16,7 +16,7 @@ LFX = самодостаточный runtime одного flow: базовый �
 
 ## Шаг 0 — достать тулкит и бинарники из образов
 ```bash
-docker create --name kf aso9864/langflow-v2:1.0.30-astra && docker cp kf:/opt/lfx_builder ./lfx_builder && docker rm kf
+docker create --name kf aso9864/langflow-v2:1.0.29-astra4 && docker cp kf:/opt/lfx_builder ./lfx_builder && docker rm kf
 docker create --name svc aso9864/lfx-svc:1.0.0
 mkdir -p lfx-svc && docker cp svc:/bin lfx-svc/bin && docker cp svc:/lib lfx-svc/lib && docker rm svc
 mkdir -p lfx-svc/models && cp /носитель/с-моделями/*.gguf lfx-svc/models/
