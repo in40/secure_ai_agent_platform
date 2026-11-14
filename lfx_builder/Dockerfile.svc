@@ -1,0 +1,14 @@
+# lfx-svc — транспортник бинарников локальных сервисов для ОФЛАЙН-remote.
+# Собирается на машине с интернетом рядом с каталогом, где лежит bin/ и lib/
+# (результат fetch_local_services.sh). МОДЕЛИ СЮДА НЕ КЛАДУТ — их заказчик
+# приносит свои (эмбеддер должен совпадать с индексом коллекций).
+#
+#   docker build -f Dockerfile.svc -t aso9864/lfx-svc:1.0.0 .
+#   docker push aso9864/lfx-svc:1.0.0
+#
+# На remote (офлайн, docker hub доступен только за нашим образом):
+#   docker create --name svc aso9864/lfx-svc:1.0.0
+#   docker cp svc:/bin ./lfx-svc/bin && docker cp svc:/lib ./lfx-svc/lib
+FROM scratch
+COPY bin/ /bin/
+COPY lib/ /lib/
