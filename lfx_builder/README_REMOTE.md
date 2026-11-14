@@ -6,14 +6,22 @@ LFX = самодостаточный runtime одного flow: базовый �
 используются только наши образы с Docker Hub и принесённые файлы.
 
 ## Что понадобится на remote
-- docker + python3 (любой актуальный);
-- базовый образ: `aso9864/langflow-v2:1.0.29-astra` (он же `latest`; ~8.4GB)
-  или `aso9864/langflow-v2:1.0.28` (Rocky) — `docker pull` заранее;
-- транспортник бинарников: `aso9864/lfx-svc:1.0.0` (llama-server CPU + qdrant, без моделей);
-- каталог `lfx_builder/` из репо `in40/secure_ai_agent_platform` (git bundle / архив);
-- экспорт flow JSON (Settings → Export, из их langflow той же версии 1.0.29);
+Поставка — **только образы с Docker Hub** (git remote недоступен):
+- `aso9864/langflow-v2:1.0.30-astra` (~8.4GB) — база + **LFX-тулкит уже внутри** (`/opt/lfx_builder`);
+- `aso9864/lfx-svc:1.0.0` (~250MB) — бинарники llama-server(CPU)+qdrant, без моделей;
+- docker + python3 на хосте remote;
+- экспорт flow JSON (Settings → Export, из их langflow версии 1.13.x/нашей сборки);
 - GGUF-модели заказчика (см. «Правила зависимостей»);
 - LLM-эндпоинт: OpenAI-compatible URL+ключ+модель (не запекается, из env).
+
+## Шаг 0 — достать тулкит и бинарники из образов
+```bash
+docker create --name kf aso9864/langflow-v2:1.0.30-astra && docker cp kf:/opt/lfx_builder ./lfx_builder && docker rm kf
+docker create --name svc aso9864/lfx-svc:1.0.0
+mkdir -p lfx-svc && docker cp svc:/bin lfx-svc/bin && docker cp svc:/lib lfx-svc/lib && docker rm svc
+mkdir -p lfx-svc/models && cp /носитель/с-моделями/*.gguf lfx-svc/models/
+```
+(Образы `docker pull` делаются заранее, пока доступ к Hub есть; дальше — полный офлайн.)
 
 ## Шаг 1 — каталог локальных сервисов `lfx-svc/`
 Структура: `lfx-svc/bin/{qdrant,llama-server}`, `lfx-svc/lib/*.so`, `lfx-svc/models/*.gguf`.

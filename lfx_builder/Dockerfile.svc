@@ -2,6 +2,7 @@
 # Собирается на машине с интернетом рядом с каталогом, где лежит bin/ и lib/
 # (результат fetch_local_services.sh). МОДЕЛИ СЮДА НЕ КЛАДУТ — их заказчик
 # приносит свои (эмбеддер должен совпадать с индексом коллекций).
+# Тулкит lfx_builder запекается в базовый образ langflow-v2 (/opt/lfx_builder), не сюда.
 #
 #   docker build -f Dockerfile.svc -t aso9864/lfx-svc:1.0.0 .
 #   docker push aso9864/lfx-svc:1.0.0

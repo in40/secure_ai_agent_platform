@@ -69,6 +69,9 @@ COPY patched_lfx_schemas.py /app/.venv/lib/python3.13/site-packages/lfx/utils/sc
 COPY patched_langflow_schemas.py /app/.venv/lib/python3.13/site-packages/langflow/utils/schemas.py
 COPY patched_main.py /app/.venv/lib/python3.13/site-packages/langflow/main.py
 COPY simpleui/ /app/simpleui/
+
+# LFX-тулкит: remote достаёт его отсюда (docker cp) — git remote недоступен
+COPY lfx_builder/ /opt/lfx_builder/
 RUN chown -R 1000:0 /app
 USER user
 
