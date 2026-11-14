@@ -107,7 +107,9 @@ def analyze_custom_nodes(flow: dict, manifest: dict, unknown: list[str], export_
         t = norm_type(d.get("type", ""))
         if t in unknown:
             code = node_code(node_template(n))
-            if code and any(m in code for m in CUSTOM_MARKERS):
+            # flow-only нода = неизвестный тип + запечённый в flow код. Маркеры —
+            # подстраховка: достаточно "Component" в коде (наследники lfx.custom.Component)
+            if code and ("Component" in code or any(m in code for m in CUSTOM_MARKERS)):
                 codes[t] = code
 
     exported: dict[str, str] = {}

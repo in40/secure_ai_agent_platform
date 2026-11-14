@@ -71,7 +71,7 @@
     "textinput", "booleaninput", "dropdown", "tablecomponent", "dataframe",
     "documentprompt", "loopcomponent", "mcptools", "recursivecharactertextsplitter",
     "typeconvertercomponent", "vllmmodel", "splittextcomponent", "filterdataframe",
-    "sqlconnectorcomponent", "watchfile"
+    "sqlconnectorcomponent", "watchfile", "embeddingmodel"
   ],
   "services": {
     "_note": "см. RUNTIME_SERVICES.md — сопоставление 'нода flow → локальный сервис в LFX'",
