@@ -13,7 +13,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 FLOW=${1:?"нужен путь к flow JSON (экспорт flow из langflow)"}
 NAME=${2:?"нужно короткое имя образа"}
 shift 2
-BASE=${LFX_BASE:-aso9864/langflow-v2:1.0.29-astra4}
+BASE=${LFX_BASE:-aso9864/langflow-v2:1.0.29}
 SVC=${LFX_SVC:-$HERE/lfx-svc}
 
 echo "=== 1. профиль flow (что вычитать, какие сервисы нужны) ==="

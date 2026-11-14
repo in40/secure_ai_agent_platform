@@ -13,7 +13,7 @@
 #      SKIP_LLAMA=1 / SKIP_QDRANT=1 / SKIP_MODELS=1
 set -euo pipefail
 OUTDIR=${OUTDIR:-/tmp/lfx-svc}
-BASE_IMAGE=${BASE_IMAGE:-aso9864/langflow-v2:1.0.29-astra4}
+BASE_IMAGE=${BASE_IMAGE:-aso9864/langflow-v2:1.0.29}
 QDRANT_VER=${QDRANT_VER:-1.20.1}
 RERANK_URL=${RERANK_URL:-https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF/resolve/main/bge-reranker-v2-m3-Q4_K_M.gguf}
 mkdir -p "$OUTDIR/bin" "$OUTDIR/lib" "$OUTDIR/models"
