@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -110,6 +111,20 @@ class DoclingInlineComponent(BaseFileComponent):
 
         def main():
             cfg = json.loads(sys.stdin.read())
+            out_path = cfg.get("out_path")
+
+            def emit(obj):
+                # Result goes to a file (immune to stdout pollution by third-party
+                # libs printing bare values) and to stdout for backward compat.
+                s = json.dumps(obj)
+                if out_path:
+                    try:
+                        with open(out_path, "w", encoding="utf-8") as f:
+                            f.write(s)
+                    except Exception:
+                        pass
+                print(s)
+
             file_paths      = cfg["file_paths"]
             pipeline        = cfg["pipeline"]
             ocr_engine      = cfg["ocr_engine"]
@@ -123,7 +138,7 @@ class DoclingInlineComponent(BaseFileComponent):
                 from docling.datamodel.pipeline_options import PdfPipelineOptions
                 from docling.document_converter import DocumentConverter, FormatOption, PdfFormatOption
             except ImportError as e:
-                print(json.dumps({"ok": False, "error": f"Docling is not installed: {e}"}))
+                emit({"ok": False, "error": f"Docling is not installed: {e}"})
                 return
 
             # --- build converter ------------------------------------------------
@@ -155,14 +170,14 @@ class DoclingInlineComponent(BaseFileComponent):
                         try:
                             from langchain_docling.picture_description import PictureDescriptionLangChainOptions
                         except ImportError:
-                            print(json.dumps({
+                            emit({
                                 "ok": False,
                                 "error": (
                                     "langchain-docling is not installed. Install it with "
                                     "`uv pip install 'langflow[docling-image-description]'` or "
                                     "`uv pip install 'lfx-docling[image-description]'`."
                                 )
-                            }))
+                            })
                             return
                         mod_name, cls_name = pic_desc_config["__class_path__"].rsplit(".", 1)
                         mod = importlib.import_module(mod_name)
@@ -175,7 +190,7 @@ class DoclingInlineComponent(BaseFileComponent):
                             llm=llm, prompt=pic_desc_prompt,
                         )
                     except Exception as e:
-                        print(json.dumps({"ok": False, "error": f"Picture description setup failed: {e}"}))
+                        emit({"ok": False, "error": f"Picture description setup failed: {e}"})
                         return
 
                 if pipeline == "vlm":
@@ -201,7 +216,7 @@ class DoclingInlineComponent(BaseFileComponent):
                             )
                         converter = DocumentConverter(format_options=fmt)
                     except Exception as e:
-                        print(json.dumps({"ok": False, "error": f"VLM pipeline setup failed: {e}"}))
+                        emit({"ok": False, "error": f"VLM pipeline setup failed: {e}"})
                         return
                 else:
                     pdf_opt = PdfFormatOption(pipeline_options=pipe)
@@ -213,7 +228,7 @@ class DoclingInlineComponent(BaseFileComponent):
                     converter = DocumentConverter(format_options=fmt)
                 _log("converter_ready", pipeline=pipeline)
             except Exception as e:
-                print(json.dumps({"ok": False, "error": f"Converter creation failed: {e}"}))
+                emit({"ok": False, "error": f"Converter creation failed: {e}"})
                 return
 
             # --- process files --------------------------------------------------
@@ -247,7 +262,7 @@ class DoclingInlineComponent(BaseFileComponent):
                     _tb.print_exc()
                     results.append(None)
 
-            print(json.dumps({"ok": True, "results": results}))
+            emit({"ok": True, "results": results})
 
         if __name__ == "__main__":
             try:
@@ -281,6 +296,12 @@ class DoclingInlineComponent(BaseFileComponent):
         if self.pic_desc_llm is not None:
             pic_desc_config = _serialize_pydantic_model(self.pic_desc_llm)
 
+        # Файл для результата: не зависит от загрязнения stdout сторонними либами
+        # (torch/easyocr/docling могут печатать в stdout «мусор» до итогового JSON).
+        import tempfile as _tempfile
+        _out_fd, _out_path = _tempfile.mkstemp(prefix="docling_result_", suffix=".json")
+        os.close(_out_fd)
+
         args = {
             "file_paths": file_paths,
             "pipeline": self.pipeline,
@@ -288,6 +309,7 @@ class DoclingInlineComponent(BaseFileComponent):
             "do_picture_classification": self.do_picture_classification,
             "pic_desc_config": pic_desc_config,
             "pic_desc_prompt": self.pic_desc_prompt,
+            "out_path": _out_path,
         }
 
         # Use Popen with a polling loop (same pattern as Read File advanced mode).
@@ -319,6 +341,10 @@ class DoclingInlineComponent(BaseFileComponent):
                 if elapsed >= docling_timeout:
                     proc.kill()
                     proc.wait()
+                    try:
+                        os.unlink(_out_path)
+                    except OSError:
+                        pass
                     msg = (
                         f"Docling processing timed out after {docling_timeout}s. Try processing fewer or smaller files."
                     )
@@ -331,17 +357,41 @@ class DoclingInlineComponent(BaseFileComponent):
             stdout_bytes = stdout_file.read()
             stderr_bytes = stderr_file.read()
 
-        if not stdout_bytes:
-            err_msg = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else "no output"
-            msg = f"Docling subprocess error (exit={proc.returncode}): {err_msg[-3000:]}"
-            raise RuntimeError(msg)
-
+        # Primary channel: result file. Fallback: last stdout line that looks like
+        # the result JSON (stdout may be polluted by third-party prints).
+        payload = None
         try:
-            payload = json.loads(stdout_bytes.decode("utf-8"))
-        except Exception as e:
-            err_msg = stderr_bytes.decode("utf-8", errors="replace")
-            msg = f"Invalid JSON from Docling subprocess: {e}. stderr={err_msg}"
-            raise RuntimeError(msg) from e
+            with open(_out_path, encoding="utf-8") as f:
+                payload = json.loads(f.read())
+        except Exception:  # noqa: BLE001
+            payload = None
+        finally:
+            try:
+                os.unlink(_out_path)
+            except OSError:
+                pass
+
+        if payload is None:
+            _text = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+            for _line in reversed(_text.splitlines()):
+                _line = _line.strip()
+                if _line.startswith('{"ok"'):
+                    try:
+                        payload = json.loads(_line)
+                        break
+                    except Exception:  # noqa: BLE001
+                        continue
+
+        if payload is None:
+            err_msg = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else "no output"
+            if not stdout_bytes:
+                msg = f"Docling subprocess error (exit={proc.returncode}): {err_msg[-3000:]}"
+            else:
+                msg = (
+                    f"Invalid JSON from Docling subprocess (stdout head={stdout_bytes[:200]!r}). "
+                    f"stderr={err_msg[-2000:]}"
+                )
+            raise RuntimeError(msg)
 
         if not payload.get("ok"):
             error_msg = payload.get("error", "Unknown Docling error")
