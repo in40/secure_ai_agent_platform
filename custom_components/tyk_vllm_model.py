@@ -109,6 +109,18 @@ class TykVLLMModelComponent(LCModelComponent):
             info="Системное сообщение.",
             advanced=False,
         ),
+        DropdownInput(
+            name="reasoning_mode",
+            display_name="Reasoning",
+            options=["off", "on"],
+            value="off",
+            info=(
+                "Thinking-режим Qwen3.8 (по умолчанию модель думает). off — chat_template_kwargs."
+                "enable_thinking=false (+ /no_think в промпте), on — enable_thinking=true. "
+                "Для off рекоменд. temperature=0.7, top_p=0.8, presence_penalty=1.5."
+            ),
+            advanced=False,
+        ),
         SliderInput(
             name="temperature",
             display_name="Temperature",
@@ -122,7 +134,10 @@ class TykVLLMModelComponent(LCModelComponent):
     async def text_response(self) -> Message:
         settings = get_vllm_tyk_settings()
         model_name = str(self.model_name or MODEL_CHOICES[0]).strip()
-        input_text = vllm_call.apply_no_think_prompt(_extract_text(self.input_value).strip())
+        reasoning_on = str(getattr(self, "reasoning_mode", "off") or "off") == "on"
+        input_text = _extract_text(self.input_value).strip()
+        if not reasoning_on:
+            input_text = vllm_call.apply_no_think_prompt(input_text)
         system_text = _extract_text(self.system_message).strip()
         logger.info(
             "TykVLLMModel: запрос",
@@ -144,7 +159,7 @@ class TykVLLMModelComponent(LCModelComponent):
                     system_message=system_text,
                     max_tokens=int(self.max_tokens or 4000),
                     temperature=self.temperature if self.temperature is not None else 0.1,
-                    enable_thinking=_model_needs_no_think(model_name),
+                    enable_thinking=reasoning_on,
                 ),
             )
         except Exception as exc:
@@ -182,8 +197,8 @@ class TykVLLMModelComponent(LCModelComponent):
             "max_tokens": self.max_tokens or None,
             "max_retries": settings.vllm_llm_retry_attempts,
         }
-        if _model_needs_no_think(model_name):
-            kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+        reasoning_on = str(getattr(self, "reasoning_mode", "off") or "off") == "on"
+        kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": reasoning_on}}
         if vllm_uses_epa_auth(settings):
             token = fetch_vllm_epa_access_token_sync(settings)
             kwargs.update(chat_openai_epa_kwargs(settings, token))
