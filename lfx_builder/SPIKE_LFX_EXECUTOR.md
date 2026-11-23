@@ -68,3 +68,28 @@ rerank :8082 (`--reranking`) — бинарники из `/app/lfx/bin` обра
    (как в спайке) — но если нужен reasoning on/off, проверять проброс chat_template_kwargs
    через extra_body стандартной ноды.
 4. Контракт WEBUI_CONTRACT переработать под `/flows/{id}/run` (проще: без input_request).
+
+## Раунд 2: Astra-образ + docling + наши компоненты (без qdrant) — ЗЕЛЁНЫЙ
+
+`exec/Dockerfile.lfxexec`: alse-python:1.8.1-3.13.5 + venv(lfx 1.13.3, langchain-openai,
+docling, CPU torch) + конвертированные компоненты (tyk_vllm_model, document_page_splitter,
+patched_docling_inline) + `_vllm_tyk_lib` в /app. flatten → **astra-exec:0.1 = 4.34 GB**.
+
+Демо-flow docqa (`exec/assemble_docqa.py`): ChatInput("путь---вопрос") → Router(фолбэк:
+путь до `---`) → DoclingInline → Chunk → answer_synthesizer → **TykVLLMModel** → ChatOutput.
+Нода TykGенерируется из компонента в контейнере (`exec/gen_tyk_node.py`, формат ноды —
+копия структуры существующей custom-ноды, tpl['template'] без обёртки 'value').
+
+Грабли раунда 2:
+1. flatten (docker export/import) **съедает ENV** — PATH/PYTHONPATH/HF_HOME передавать
+   через `docker run -e` (или `docker import --change`).
+2. Handle-валидация executor'а строгая: `targetHandle.type` обязан совпадать со схемой
+   исходного ребра (`str`, не `other`), иначе «invalid handles».
+3. DataFrame-выходы нод приходят как pandas **Table**; `lfx.DataFrame.text` — pandas-аксессор,
+   который ломает unwrap → str(df) с обрезкой ячеек. В synthesizer добавлена ветка
+   `to_dict("records")` до unwrap (см. assemble_docqa.py).
+4. TykVLLMModel без Tyk/EPA: `VLLM_EPA_AUTH=false` + `VLLM_API_BASE` на OpenAI-совместимый
+   эндпоинт (в спайке — локальный llama-server-прокси 122b) + `VLLM_API_KEY`, `VLLM_MODEL_CHOICES`.
+
+E2E: `POST /flows/{id}/run {"input_value":"/data/contract.md---Кто ответственный...?"}` →
+«Иванов И.И., до 15 декабря 2026» (43 с, холодный docling).
