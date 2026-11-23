@@ -127,8 +127,12 @@ def check_file(path: Path) -> int:
 
 def convert_flow(path: Path, out_path: Path) -> int:
     data = json.loads(path.read_text(encoding="utf-8"))
+    graph = data.get("data") if isinstance(data.get("data"), dict) else data
+    nodes = graph.get("nodes", []) if isinstance(graph, dict) else []
+    if not nodes:
+        raise SystemExit("в flow нет нод (пустой flow?)")
     n = 0
-    for node in data.get("data", data).get("nodes", []):
+    for node in nodes:
         code = (node.get("data", {}).get("node", {}).get("template", {})
                 .get("code", {}).get("value"))
         if isinstance(code, str) and "langflow" in code:
