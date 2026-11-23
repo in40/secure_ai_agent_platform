@@ -141,14 +141,26 @@ async function build() {
 }
 async function loadJobs() {
   const js = await req(BAPI + "/builds");
-  $("jobs").innerHTML = "<tr><th>образ</th><th>flow</th><th>создан</th><th>статус</th><th>результат</th></tr>" +
+  $("jobs").innerHTML = "<tr><th>образ</th><th>flow</th><th>создан</th><th>статус</th><th>результат</th><th></th></tr>" +
     js.map(j=>`<tr onclick="showLog('${j.id}')" style="cursor:pointer">
       <td>lfx-${esc(j.name)}</td><td class="dim">${esc(j.flow_name)}</td>
       <td class="dim">${esc(j.created)}</td>
       <td><span class="badge b-${j.status}">${j.status}</span></td>
-      <td class="dim">${j.status==='success'?esc((j.base?j.base+' · ':'')+j.image+' · '+j.size+' · '+(j.smoke||''))+(j.smoke_run&&j.smoke_run!=='ok'?' · ⚠run':''):(j.error?esc(j.error):'')}</td></tr>`).join("");
+      <td class="dim">${j.status==='success'?esc((j.base?j.base+' · ':'')+j.image+' · '+j.size+' · '+(j.smoke||''))+(j.smoke_run&&j.smoke_run!=='ok'?' · ⚠run':''):(j.error?esc(j.error):'')}${pushCell(j)}</td>
+      <td>${j.status==='success'?`<button class="ghost" onclick="event.stopPropagation();pushJob('${j.id}')">Push</button>`:''}</td></tr>`).join("");
   clearTimeout(pollTimer);
-  if (js.some(j=>j.status==='running'||j.status==='queued')) pollTimer = setTimeout(loadJobs, 3000);
+  if (js.some(j=>j.status==='running'||j.status==='queued'||(j.push||{}).status==='running'||(j.push||{}).status==='queued')) pollTimer = setTimeout(loadJobs, 3000);
+}
+function pushCell(j) {
+  const p = j.push || {};
+  if (!p.status) return '';
+  const cls = {success:'b-success',failed:'b-failed',running:'b-running',queued:'b-queued'}[p.status]||'b-queued';
+  return ` <span class="badge ${cls}" title="${esc(p.error||'')}">push:${p.status}</span>` +
+         (p.status==='success'?`<div class="dim">docker.io/${esc(p.target)}</div>`:'');
+}
+async function pushJob(id) {
+  try { await req(BAPI + "/builds/" + id + "/push", {method:"POST"}); loadJobs(); }
+  catch(e) { st("<span class='err'>"+esc(String(e))+"</span>"); }
 }
 async function showLog(id) {
   const d = await req(BAPI + "/builds/" + id);

@@ -225,6 +225,59 @@ def _worker() -> None:
 
 threading.Thread(target=_worker, daemon=True).start()
 
+PUSH_LOCK = threading.Lock()
+HUB_NS = os.environ.get("LFXB_HUB", "aso9864")
+
+
+def _push_append(job: Path, line: str) -> None:
+    with (job / "build.log").open("a") as f:
+        f.write(f"[{time.strftime('%H:%M:%S')}] [push] {line}\n")
+
+
+def _push_job(jid: str) -> None:
+    job = JOBS_DIR / jid
+    meta = _meta(job)
+    name = meta["name"]
+    src = f"lfx-{name}:latest"
+    hub = f"{HUB_NS}/lfx-{name}"
+    ts = f"{hub}:{time.strftime('%Y%m%d-%H%M')}"
+    with PUSH_LOCK:
+        meta["push"] = {"status": "running", "target": ts}
+        _save(job, meta)
+        try:
+            for cmd in (["docker", "tag", src, ts], ["docker", "tag", src, f"{hub}:latest"],
+                        ["docker", "push", ts], ["docker", "push", f"{hub}:latest"]):
+                _push_append(job, "$ " + " ".join(cmd))
+                p = subprocess.run(cmd, capture_output=True, text=True, timeout=5400)
+                for t in (p.stdout + p.stderr).strip().splitlines()[-5:]:
+                    _push_append(job, t)
+                if p.returncode != 0:
+                    raise RuntimeError(f"шаг push вернул {p.returncode}")
+            meta["push"] = {"status": "success", "target": ts, "latest": f"{hub}:latest",
+                            "at": time.strftime("%Y-%m-%d %H:%M:%S")}
+        except Exception as e:  # noqa: BLE001
+            meta["push"] = {"status": "failed", "target": ts, "error": str(e)[:300],
+                            "at": time.strftime("%Y-%m-%d %H:%M:%S")}
+        _save(job, meta)
+
+
+@app.post("/api/builds/{jid}/push")
+def push_build(jid: str, user: str = Depends(auth)) -> dict:
+    job = JOBS_DIR / jid
+    if not job.exists():
+        raise HTTPException(404)
+    meta = _meta(job)
+    if meta.get("user") != user:
+        raise HTTPException(403)
+    if meta.get("status") != "success":
+        raise HTTPException(409, "только успешно собранное")
+    if (meta.get("push") or {}).get("status") in ("queued", "running"):
+        raise HTTPException(409, "push уже выполняется")
+    meta["push"] = {"status": "queued"}
+    _save(job, meta)
+    threading.Thread(target=_push_job, args=(jid,), daemon=True).start()
+    return {"push": "queued", "target": f"{HUB_NS}/lfx-{meta['name']}"}
+
 
 @app.get("/api/health")
 def health() -> dict:
