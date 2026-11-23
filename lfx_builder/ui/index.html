@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>LFX Builder</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root { --bg:#0f1420; --card:#1a2233; --line:#2a3550; --txt:#dbe4f5; --dim:#8494b3;
+        --acc:#4f8cff; --ok:#39c07f; --err:#ff6b6b; --warn:#e0b341; }
+* { box-sizing:border-box; }
+body { margin:0; font:14px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--txt); }
+.wrap { max-width:1100px; margin:0 auto; padding:20px; }
+h1 { font-size:19px; margin:0 0 4px; } h1 small { color:var(--dim); font-weight:400; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin:14px 0; }
+input,button { font:inherit; border-radius:7px; border:1px solid var(--line); background:#121a2b; color:var(--txt); padding:8px 11px; }
+button { cursor:pointer; background:var(--acc); border:none; color:#fff; font-weight:600; }
+button:disabled { opacity:.45; cursor:default; }
+button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt); font-weight:400; }
+table { width:100%; border-collapse:collapse; }
+td,th { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); }
+th { color:var(--dim); font-weight:500; font-size:12px; }
+tr.sel { background:#16203a; }
+.chip { display:inline-block; background:#121a2b; border:1px solid var(--line); border-radius:20px;
+        padding:2px 10px; margin:2px; font-size:12.5px; }
+.chip.c { border-color:var(--acc); color:#9dc2ff; }
+.badge { padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600; }
+.b-queued{background:#2a3550;color:var(--dim)} .b-running{background:#3a2f14;color:var(--warn)}
+.b-success{background:#14351f;color:var(--ok)} .b-failed{background:#3a1616;color:var(--err)}
+pre { background:#0b101c; border:1px solid var(--line); border-radius:8px; padding:10px;
+      overflow:auto; max-height:340px; font-size:12px; white-space:pre-wrap; }
+.row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.dim { color:var(--dim); } .err { color:var(--err); }
+.cols { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media(max-width:800px){.cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>LFX Builder <small>сборка runtime-образа из flow</small></h1>
+<div id="status" class="dim"></div>
+
+<div id="login" class="card" style="display:none;max-width:360px">
+  <div class="row" style="flex-direction:column;align-items:stretch">
+    <input id="lu" placeholder="Логин langflow" autocomplete="username">
+    <input id="lp" type="password" placeholder="Пароль" autocomplete="current-password">
+    <button onclick="login()">Войти</button>
+  </div>
+</div>
+
+<div id="main" style="display:none">
+  <div class="cols">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <b>Мои flow</b>
+        <span><button class="ghost" onclick="loadFlows()">↻</button>
+             <button class="ghost" onclick="logout()">Выйти</button></span>
+      </div>
+      <table id="flows"></table>
+    </div>
+    <div class="card" id="detail"><span class="dim">Выберите flow слева</span></div>
+  </div>
+  <div class="card">
+    <b>Задания сборки</b> <button class="ghost" onclick="loadJobs()">↻</button>
+    <table id="jobs"></table>
+    <pre id="joblog" style="display:none"></pre>
+  </div>
+</div>
+</div>
+<script>
+const API = "/api/v1", BAPI = "/lfx-builder-api/api";
+let token = sessionStorage.getItem("lfxb_token") || "";
+let sel = null, pollTimer = null;
+const $ = id => document.getElementById(id);
+const st = m => { $("status").innerHTML = m || ""; };
+
+async function req(url, opt={}) {
+  opt.headers = Object.assign({"Authorization": "Bearer " + token}, opt.headers||{});
+  const r = await fetch(url, opt);
+  if (r.status === 401) { logout(); throw new Error("сессия истекла"); }
+  if (!r.ok) throw new Error((await r.text()).slice(0,200));
+  return r.json();
+}
+async function login() {
+  const f = new URLSearchParams({username: $("lu").value, password: $("lp").value});
+  const r = await fetch(API + "/login", {method:"POST", body:f});
+  if (!r.ok) { st("<span class='err'>неверный логин/пароль</span>"); return; }
+  token = (await r.json()).access_token;
+  sessionStorage.setItem("lfxb_token", token);
+  boot();
+}
+function logout() { sessionStorage.removeItem("lfxb_token"); token="";
+  $("main").style.display="none"; $("login").style.display="block"; }
+
+async function boot() {
+  try { const me = await req(API + "/users/whoami");
+    $("login").style.display="none"; $("main").style.display="block";
+    st("вошёл: " + me.username); loadFlows(); loadJobs();
+  } catch(e) { $("login").style.display="block"; }
+}
+async function loadFlows() {
+  const d = await req(API + "/flows/");
+  const fl = (Array.isArray(d) ? d : (d.flows||[])).sort((a,b)=> (b.updated_at||"").localeCompare(a.updated_at||""));
+  $("flows").innerHTML = "<tr><th>название</th><th>обновлён</th><th></th></tr>" + fl.map(f=>
+    `<tr class="${sel&&sel.id===f.id?'sel':''}" onclick='pick(${JSON.stringify(f.id)})'>
+      <td>${esc(f.name)}</td><td class="dim">${(f.updated_at||"").slice(0,10)}</td>
+      <td><button onclick="event.stopPropagation();build('${f.id}')">Build</button></td></tr>`).join("");
+}
+function esc(s){ return (s||"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+async function pick(id) {
+  const f = await req(API + "/flows/" + id);
+  sel = f;
+  const comps = analyze(f);
+  $("detail").innerHTML = `<b>${esc(f.name)}</b>
+    <div class="dim" style="margin:6px 0">узлы flow (＊ = кастомный компонент, попадёт в образ):</div>
+    <div>${comps.map(c=>`<span class="chip ${c.custom?'c':''}" title="${esc(c.imports.join(', '))}">${esc(c.type)}${c.custom?'＊':''}</span>`).join("")}</div>
+    <div class="row" style="margin-top:12px">
+      <input id="imgname" value="${slug(f.name)}" style="flex:1">
+      <button onclick="build(id)">Собрать LFX</button>
+    </div>`;
+}
+function analyze(f) {
+  const nodes = ((f.data||{}).nodes)||[]; const m = {};
+  for (const n of nodes) {
+    const t = (n.data||{}).type || n.type || "?";
+    const code = ((((n.data||{}).node||{}).template||{}).code||{}).value || "";
+    const imp = [...new Set([...code.matchAll(/^(?:from|import)\s+([A-Za-z_][\w.]*)/gm)].map(x=>x[1].split(".")[0]))]
+      .filter(i=>!["lfx","langflow","typing","os","sys","json","time","re","__future__"].includes(i));
+    m[t] = m[t] || {type:t, custom:false, imports:new Set()};
+    m[t].custom = m[t].custom || !!code; imp.forEach(i=>m[t].imports.add(i));
+  }
+  return Object.values(m).map(v=>({...v, imports:[...v.imports]}));
+}
+function slug(s){ return (s||"flow").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40) || "flow"; }
+async function build() {
+  if (!sel) { st("<span class='err'>сначала выберите flow</span>"); return; }
+  const name = ($("imgname")||{}).value || slug(sel.name);
+  try {
+    const d = await req(BAPI + "/builds", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({flow_id: sel.id, name, flow: sel})});
+    st("сборка запущена: " + d.job_id); loadJobs();
+  } catch(e) { st("<span class='err'>"+esc(String(e))+"</span>"); }
+}
+async function loadJobs() {
+  const js = await req(BAPI + "/builds");
+  $("jobs").innerHTML = "<tr><th>образ</th><th>flow</th><th>создан</th><th>статус</th><th>результат</th></tr>" +
+    js.map(j=>`<tr onclick="showLog('${j.id}')" style="cursor:pointer">
+      <td>lfx-${esc(j.name)}</td><td class="dim">${esc(j.flow_name)}</td>
+      <td class="dim">${esc(j.created)}</td>
+      <td><span class="badge b-${j.status}">${j.status}</span></td>
+      <td class="dim">${j.status==='success'?esc(j.image+' · '+j.size):(j.error?esc(j.error):'')}</td></tr>`).join("");
+  clearTimeout(pollTimer);
+  if (js.some(j=>j.status==='running'||j.status==='queued')) pollTimer = setTimeout(loadJobs, 3000);
+}
+async function showLog(id) {
+  const d = await req(BAPI + "/builds/" + id);
+  $("joblog").style.display = "block";
+  $("joblog").textContent = d.log.join("\n") || "(лог пуст)";
+}
+boot();
+</script>
+</body>
+</html>
