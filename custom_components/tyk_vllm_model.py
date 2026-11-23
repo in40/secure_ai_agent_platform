@@ -157,6 +157,7 @@ class TykVLLMModelComponent(LCModelComponent):
                 vllm_call.VllmTykChatRequest(
                     user_message=input_text,
                     system_message=system_text,
+                    model_name=model_name,
                     max_tokens=int(self.max_tokens or 4000),
                     temperature=self.temperature if self.temperature is not None else 0.1,
                     enable_thinking=reasoning_on,
