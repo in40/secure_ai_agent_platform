@@ -3,7 +3,7 @@ set -e
 SRC=${1:-langflow-v2-docling:1.0.29-rc}
 DST=${2:-langflow-v2-docling:1.0.29}
 
-mapfile -t ARGS < <(docker inspect -f '{{json .Config}}' "$SRC" | python3 /tmp/gen_changes.py)
+mapfile -t ARGS < <(docker inspect -f '{{json .Config}}' "$SRC" | python3 "$(dirname "$(readlink -f "$0")")/gen_changes.py")
 echo "changes: ${#ARGS[@]} args"
 docker rm -f flat_tmp 2>/dev/null || true
 docker create --name flat_tmp "$SRC" >/dev/null
