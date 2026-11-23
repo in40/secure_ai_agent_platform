@@ -28,6 +28,9 @@ LF2LFX = REPO / "lfx_builder" / "lf2lfx.py"
 FLATTEN = REPO / "flatten.sh"
 GEN_CHANGES = REPO / "gen_changes.py"
 BASE_IMAGE = os.environ.get("LFXB_BASE", "astra-exec:0.1")
+BASE_SLIM = os.environ.get("LFXB_BASE_SLIM", "astra-exec-slim:0.1")
+# типы/импорты, требующие тяжёлой базы (docling+torch)
+DOC_TYPES = {"DoclingInline", "ChunkDoclingDocument"}
 SMOKE_ENV = os.environ.get("LFXB_SMOKE_ENV", "/home/sorokin/lfx-builder/smoke.env")
 SMOKE_PORTS = range(17860, 17900)
 # ноды, для которых L3 (реальный прогон) требует внешних данных — проверяем только загрузку
@@ -186,7 +189,6 @@ def _worker() -> None:
         try:
             meta["status"] = "running"
             _save(job, meta)
-            _log(job, f"база: {BASE_IMAGE}")
             free = shutil.disk_usage("/").free
             if free < 8 * 1024**3:
                 raise RuntimeError(f"на хосте мало места: {free // 2**20} МБ (< 8 ГБ)")
@@ -194,9 +196,13 @@ def _worker() -> None:
             comps = _analyze(json.loads((job / "flow.json").read_text()))
             (job / "components.json").write_text(json.dumps(comps, ensure_ascii=False, indent=1))
             _log(job, "компоненты: " + ", ".join(c["type"] + ("*" if c["custom"] else "") for c in comps))
+            need_doc = any(c["type"] in DOC_TYPES or "docling" in c["imports"] for c in comps)
+            base = BASE_IMAGE if need_doc else BASE_SLIM
+            meta["base"] = base
+            _log(job, f"база: {base}" + ("" if need_doc else " (slim: docling не нужен)"))
             tag = f"lfx-{meta['name']}:{jid[:8]}"
             (job / "Dockerfile").write_text(
-                f"FROM {BASE_IMAGE}\n"
+                f"FROM {base}\n"
                 "COPY flow.lfx.json /flows/flow.json\n"
                 'CMD ["/app/.venv/bin/lfx", "serve", "/flows/flow.json", "--host", "0.0.0.0", "--port", "7860"]\n')
             _run(job, ["docker", "build", "-q", "-t", tag, "."])
