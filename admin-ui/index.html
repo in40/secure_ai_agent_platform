@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Langflow User Admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#1c1917; --panel:#292524; --border:#44403c; --text:#e7e5e4; --muted:#a8a29e; --accent:#3ecf8e; --red:#f87171; }
+  * { box-sizing:border-box; }
+  body { font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:24px; }
+  h1 { font-size:20px; margin:0 0 16px; } h1 span { color:var(--accent); }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:16px; max-width:900px; }
+  input,button { font:inherit; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); }
+  button { cursor:pointer; background:var(--accent); color:#000; border:none; font-weight:600; }
+  button.sec { background:var(--border); color:var(--text); }
+  button.danger { background:var(--red); color:#000; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:600; }
+  .tag { padding:2px 8px; border-radius:10px; font-size:12px; }
+  .on { background:#14532d; color:#bbf7d0; } .off { background:#450a0a; color:#fecaca; }
+  #status { color:var(--muted); font-size:13px; margin-left:8px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+</style>
+</head>
+<body>
+<h1><span>Langflow</span> User Admin <span id="status"></span></h1>
+
+<div class="card" id="loginCard">
+  <div class="row">
+    <input id="lu" placeholder="username">
+    <input id="lp" type="password" placeholder="password">
+    <button onclick="login()">Войти</button>
+    <button class="sec" onclick="logout()">Выйти</button>
+  </div>
+</div>
+
+<div class="card" id="createCard" style="display:none">
+  <div class="row">
+    <b>Новый пользователь:</b>
+    <input id="nu" placeholder="username">
+    <input id="np" type="password" placeholder="password">
+    <button onclick="createUser()">Создать</button>
+  </div>
+</div>
+
+<div class="card" id="listCard" style="display:none">
+  <table>
+    <thead><tr><th>Username</th><th>Статус</th><th>Роль</th><th>Создан</th><th>Последний вход</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<script>
+const API = "/api/v1";
+let token = sessionStorage.getItem("lfadmin_token") || "";
+
+function st(msg) { document.getElementById("status").textContent = msg || ""; }
+
+async function api(path, method="GET", body) {
+  const opts = { method, headers: { "Authorization": "Bearer " + token } };
+  if (body) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+  const r = await fetch(API + path, opts);
+  if (r.status === 401 || r.status === 403) { logout(); throw new Error("Не авторизован (401/403)"); }
+  if (!r.ok) throw new Error((await r.text()).slice(0, 200));
+  return r.status === 204 ? null : r.json();
+}
+
+async function login() {
+  const f = new URLSearchParams({ username: lu.value, password: lp.value });
+  const r = await fetch(API + "/login", { method: "POST", body: f, headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+  if (!r.ok) { st("Логин не прошёл"); return; }
+  token = (await r.json()).access_token;
+  sessionStorage.setItem("lfadmin_token", token);
+  st(""); await refresh();
+}
+
+function logout() {
+  token = ""; sessionStorage.removeItem("lfadmin_token");
+  listCard.style.display = "none"; createCard.style.display = "none";
+  st("Вышел");
+}
+
+async function refresh() {
+  if (!token) return;
+  let me;
+  try { me = await api("/users/whoami"); } catch (e) { st(e.message); return; }
+  if (!me.is_superuser) { st("Нужен superuser"); logout(); return; }
+  createCard.style.display = "block"; listCard.style.display = "block";
+  let users = [], offset = 0;
+  while (true) {
+    const d = await api(`/users/?limit=100&offset=${offset}`);
+    users = users.concat(d.users);
+    if (!d.users.length || users.length >= (d.total_count || 0)) break;
+    offset += d.users.length;
+  }
+  rows.innerHTML = users.map(u => `
+    <tr>
+      <td>${u.username}</td>
+      <td><span class="tag ${u.is_active ? "on" : "off"}">${u.is_active ? "активен" : "выключен"}</span></td>
+      <td>${u.is_superuser ? "superuser" : "user"}</td>
+      <td>${(u.create_at || "").slice(0, 10)}</td>
+      <td>${(u.last_login_at || "").slice(0, 16).replace("T", " ")}</td>
+      <td class="row">
+        <button class="sec" onclick="toggle('${u.id}', ${!u.is_active})">${u.is_active ? "Выкл" : "Вкл"}</button>
+        <button class="sec" onclick="toggleRole('${u.id}', ${!u.is_superuser})">${u.is_superuser ? "Снять admin" : "В admin"}</button>
+        <button class="sec" onclick="resetPw('${u.id}')">Пароль</button>
+      </td>
+    </tr>`).join("");
+  st("Пользователей: " + users.length);
+}
+
+async function toggle(id, active) {
+  try { await api("/users/" + id, "PATCH", { is_active: active }); await refresh(); } catch (e) { st(e.message); }
+}
+
+async function toggleRole(id, admin) {
+  if (admin && !confirm("Выдать права superuser?")) return;
+  try { await api("/users/" + id, "PATCH", { is_superuser: admin }); await refresh(); } catch (e) { st(e.message); }
+}
+
+async function resetPw(id) {
+  const pw = prompt("Новый пароль:");
+  if (!pw) return;
+  try { await api("/users/" + id, "PATCH", { password: pw }); st("Пароль обновлён"); } catch (e) { st(e.message); }
+}
+
+async function createUser() {
+  if (!nu.value || !np.value) { st("Заполните имя и пароль"); return; }
+  try {
+    await api("/users/", "POST", { username: nu.value, password: np.value });
+    nu.value = np.value = ""; st("Создан"); await refresh();
+  } catch (e) { st(e.message); }
+}
+
+if (token) refresh();
+</script>
+</body>
+</html>
