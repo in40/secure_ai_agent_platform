@@ -14,7 +14,7 @@ COPY components/ /app/custom_components/
 COPY vllm_tyk_lib/ /app/_vllm_tyk_lib/
 # slim: без docling/torch → не нужны тулчейн, GUI-библиотеки и шрифты noto
 USER root
-RUN apt-get update && apt-get purge -y --auto-purge \
+RUN apt-get update && apt-get purge -y \
       gcc g++ cpp binutils binutils-common binutils-x86-64-linux-gnu \
       libc6-dev libssl-dev linux-libc-dev libgcc-12-dev libstdc++-12-dev \
       fonts-noto-core man-db \

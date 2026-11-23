@@ -17,7 +17,7 @@ COPY components/ /app/custom_components/
 COPY vllm_tyk_lib/ /app/_vllm_tyk_lib/
 # ИБ/габариты: тулчейн после установки wheels не нужен (flatten squash'ит — удаление реально уменьшает образ)
 USER root
-RUN apt-get update && apt-get purge -y --auto-purge \
+RUN apt-get update && apt-get purge -y \
       gcc g++ cpp binutils binutils-common binutils-x86-64-linux-gnu \
       libc6-dev libssl-dev linux-libc-dev libgcc-12-dev libstdc++-12-dev man-db \
     && apt-get autoremove --purge -y && rm -rf /var/lib/apt/lists/*
