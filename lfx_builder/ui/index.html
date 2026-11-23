@@ -100,12 +100,14 @@ async function loadFlows() {
   const d = await req(API + "/flows/");
   const fl = (Array.isArray(d) ? d : (d.flows||[])).sort((a,b)=> (b.updated_at||"").localeCompare(a.updated_at||""));
   $("flows").innerHTML = "<tr><th>название</th><th>обновлён</th><th></th></tr>" + fl.map(f=>
-    `<tr class="${sel&&sel.id===f.id?'sel':''}" onclick='pick(${JSON.stringify(f.id)})'>
+    `<tr class="${sel&&sel.id===f.id?'sel':''}" onclick='pick(${JSON.stringify(f.id)}, this)'>
       <td>${esc(f.name)}</td><td class="dim">${(f.updated_at||"").slice(0,10)}</td>
       <td><button onclick="event.stopPropagation();build('${f.id}')">Build</button></td></tr>`).join("");
 }
 function esc(s){ return (s||"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
-async function pick(id) {
+async function pick(id, el) {
+  document.querySelectorAll("#flows tr").forEach(r=>r.classList.remove("sel"));
+  if (el) el.classList.add("sel");
   const f = await req(API + "/flows/" + id);
   sel = f;
   const comps = analyze(f);
@@ -130,9 +132,10 @@ function analyze(f) {
   return Object.values(m).map(v=>({...v, imports:[...v.imports]}));
 }
 function slug(s){ return (s||"flow").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40) || "flow"; }
-async function build() {
-  if (!sel) { st("<span class='err'>сначала выберите flow</span>"); return; }
-  const name = ($("imgname")||{}).value || slug(sel.name);
+async function build(id) {
+  let f = (sel && sel.id === id) ? sel : null;
+  if (!f) { sel = null; f = await req(API + "/flows/" + id); sel = f; }
+  const name = (($("imgname")||{}).value || slug(f.name)).trim();
   try {
     const d = await req(BAPI + "/builds", {method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({flow_id: sel.id, name, flow: sel})});
