@@ -146,7 +146,7 @@ async function loadJobs() {
       <td>lfx-${esc(j.name)}</td><td class="dim">${esc(j.flow_name)}</td>
       <td class="dim">${esc(j.created)}</td>
       <td><span class="badge b-${j.status}">${j.status}</span></td>
-      <td class="dim">${j.status==='success'?esc(j.image+' · '+j.size):(j.error?esc(j.error):'')}</td></tr>`).join("");
+      <td class="dim">${j.status==='success'?esc(j.image+' · '+j.size+' · '+(j.smoke||''))+(j.smoke_run&&j.smoke_run!=='ok'?' · ⚠run':''):(j.error?esc(j.error):'')}</td></tr>`).join("");
   clearTimeout(pollTimer);
   if (js.some(j=>j.status==='running'||j.status==='queued')) pollTimer = setTimeout(loadJobs, 3000);
 }

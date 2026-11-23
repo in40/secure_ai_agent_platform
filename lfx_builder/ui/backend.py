@@ -28,6 +28,11 @@ LF2LFX = REPO / "lfx_builder" / "lf2lfx.py"
 FLATTEN = REPO / "flatten.sh"
 GEN_CHANGES = REPO / "gen_changes.py"
 BASE_IMAGE = os.environ.get("LFXB_BASE", "astra-exec:0.1")
+SMOKE_ENV = os.environ.get("LFXB_SMOKE_ENV", "/home/sorokin/lfx-builder/smoke.env")
+SMOKE_PORTS = range(17860, 17900)
+# ноды, для которых L3 (реальный прогон) требует внешних данных — проверяем только загрузку
+HEAVY_TYPES = {"QdrantVectorStoreComponent", "EmbeddingModel", "RerankComponent",
+               "DoclingInline", "ChunkDoclingDocument", "SessionEnricher"}
 
 app = FastAPI(docs_url=None, redoc_url=None)
 _jobs_q: queue.Queue[str] = queue.Queue()
@@ -99,6 +104,80 @@ def _analyze(flow: dict) -> list[dict]:
     return [{**v, "imports": sorted(v["imports"])[:8]} for v in out.values()]
 
 
+def _smoke_env_dict() -> dict:
+    out = {}
+    try:
+        for line in Path(SMOKE_ENV).read_text().splitlines():
+            k, _, v = line.partition("=")
+            if k and v:
+                out[k.strip()] = v.strip()
+    except FileNotFoundError:
+        pass
+    return out
+
+
+def _free_port() -> int:
+    import socket
+    for p in SMOKE_PORTS:
+        with socket.socket() as s:
+            try:
+                s.bind(("127.0.0.1", p))
+                return p
+            except OSError:
+                continue
+    raise RuntimeError("нет свободного смоук-порта")
+
+
+def _smoke(job: Path, meta: dict, comps: list[dict], image: str) -> None:
+    """L1 старт+health, L2 flow виден в API — обязательны; L3 реальный /run — advisory."""
+    env = _smoke_env_dict()
+    if not env.get("LANGFLOW_API_KEY"):
+        meta["smoke"] = "skipped: нет smoke.env"
+        return
+    port = _free_port()
+    cname = f"smoke-{meta['id'][:8]}"
+    fid = meta["flow_id"]
+    heavy = any(c["type"] in HEAVY_TYPES for c in comps)
+    lvl = "L1+L2" if heavy else "L3"
+    key = env["LANGFLOW_API_KEY"]
+    try:
+        _run(job, ["docker", "run", "-d", "--name", cname, "--network", "host", "--memory", "2g",
+                   "--env-file", SMOKE_ENV, image, "sh", "-c",
+                   f"/app/.venv/bin/lfx serve /flows/flow.json --host 127.0.0.1 --port {port}"])
+        base = f"http://127.0.0.1:{port}"
+        ok = False
+        for _ in range(60):
+            time.sleep(2)
+            r = subprocess.run(["curl", "-sm2", "-o", "/dev/null", "-w", "%{http_code}", base + "/health"],
+                               capture_output=True, text=True)
+            if r.stdout.strip() == "200":
+                ok = True
+                break
+        if not ok:
+            st = subprocess.run(["docker", "inspect", cname, "--format",
+                                 "{{.State.Status}}/{{.State.ExitCode}}"], capture_output=True, text=True).stdout.strip()
+            logs = subprocess.run(["docker", "logs", cname], capture_output=True, text=True).stdout[-500:]
+            raise RuntimeError(f"L1 не прошёл (health timeout, {st}): {logs}")
+        flows = httpx.get(f"{base}/flows", headers={"x-api-key": key}, timeout=10).json()
+        ids = [f.get("id") for f in (flows if isinstance(flows, list) else flows.get("flows", []))]
+        if fid not in ids:
+            raise RuntimeError(f"L2: flow {fid} не среди {ids}")
+        _log(job, f"смоук {port}: L1 ok, L2 ok (flow виден)")
+        meta["smoke"] = f"passed({lvl})"
+        if not heavy:
+            try:
+                r = httpx.post(f"{base}/flows/{fid}/run", headers={"x-api-key": key},
+                               json={"input_value": "Ответь одним словом: ок", "session_id": "smoke"},
+                               timeout=300)
+                body = r.json()
+                meta["smoke_run"] = "ok" if body.get("success") else "failed: " + str(body.get("result", ""))[:200]
+            except Exception as e:  # noqa: BLE001
+                meta["smoke_run"] = f"failed: {str(e)[:200]}"
+            _log(job, "смоук L3 (advisory): " + meta["smoke_run"])
+    finally:
+        subprocess.run(["docker", "rm", "-f", cname], capture_output=True)
+
+
 def _worker() -> None:
     while True:
         jid = _jobs_q.get()
@@ -108,6 +187,9 @@ def _worker() -> None:
             meta["status"] = "running"
             _save(job, meta)
             _log(job, f"база: {BASE_IMAGE}")
+            free = shutil.disk_usage("/").free
+            if free < 8 * 1024**3:
+                raise RuntimeError(f"на хосте мало места: {free // 2**20} МБ (< 8 ГБ)")
             _run(job, ["python3", str(LF2LFX), "--flow", "flow.json", "-o", "flow.lfx.json"])
             comps = _analyze(json.loads((job / "flow.json").read_text()))
             (job / "components.json").write_text(json.dumps(comps, ensure_ascii=False, indent=1))
@@ -120,9 +202,13 @@ def _worker() -> None:
             _run(job, ["docker", "build", "-q", "-t", tag, "."])
             shutil.copy(GEN_CHANGES, "/tmp/gen_changes.py")
             _run(job, ["bash", str(FLATTEN), tag, f"lfx-{meta['name']}:latest"])
+            pr = subprocess.run(["docker", "image", "prune", "-f"], capture_output=True, text=True)
+            _log(job, "prune: " + (pr.stdout.strip().splitlines()[-1] if pr.stdout.strip() else "ok"))
             size = subprocess.run(["docker", "images", f"lfx-{meta['name']}:latest",
                                    "--format", "{{.Size}}"], capture_output=True, text=True).stdout.strip()
-            meta.update(status="success", image=f"lfx-{meta['name']}:latest", size=size)
+            meta.update(image=f"lfx-{meta['name']}:latest", size=size)
+            _smoke(job, meta, comps, f"lfx-{meta['name']}:latest")
+            meta["status"] = "success"
         except Exception as e:  # noqa: BLE001
             meta.update(status="failed", error=str(e)[:300])
             _log(job, f"ОШИБКА: {e}")
