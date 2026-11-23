@@ -61,6 +61,11 @@ docker run -d --name lfx-имя --network lfx-net -p 7867:7860 --memory 12g \
   -e LFX_LLM_MODEL=имя-модели \
   lfx-имя:latest
 ```
+Важно: `LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY=false` — **обязательный шаг** при
+запуске LFX/прода: иначе flow с кастомными компонентами (в т.ч. созданными
+пользователями в UI) блокируются при сборке («Flow build blocked: custom
+components are not allowed»). В образах политика включена по умолчанию (hardening),
+снимается только этим env при деплое.
 Важно: `--memory 12g` минимум (на пике docling+llama при 8g — OOM-137);
 `127.0.0.1` в SSRF-allowlist обязателен, иначе локальные сервисы режутся policy;
 том `/data` — персистентный sqlite (переиспользовать между запусками).
