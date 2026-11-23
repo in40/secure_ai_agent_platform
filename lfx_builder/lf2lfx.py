@@ -27,6 +27,30 @@ from pathlib import Path
 # Полные исключения вида "langflow.a.b": "lfx.c.d". Всё остальное — замена префикса.
 MODULE_MAP: dict[str, str] = {}
 
+# langflow-специфичные импорты, которых нет в standalone lfx: замена на try/except-заглушку.
+_TRACING_RE = re.compile(
+    r"^(\s*)from lfx\.services\.tracing\.service import trace_context_var( as \w+)?\s*$",
+    re.MULTILINE,
+)
+
+
+def _special_fixes(src: str) -> str:
+    """trace_context_var живёт в langflow-пакете (OTel-трассировка), в lfx его нет.
+    Валидатор lfx (custom/validate.py) исполняет только Import/ImportFrom/Assign/Def/Class —
+    Try на уровне модуля отбрасывается, поэтому заглушка безусловная (ContextVar, в
+    компонентах только .get())."""
+
+    def repl(m: re.Match) -> str:
+        ind, alias = m.group(1), m.group(2) or ""
+        name = alias.split()[-1] if alias else "trace_context_var"
+        return (
+            f"{ind}import contextvars  # lf2lfx: tracing есть только в langflow-пакете\n"
+            f"{ind}{name} = contextvars.ContextVar(\"trace_context_var\", default=None)"
+        )
+
+    return _TRACING_RE.sub(repl, src)
+
+
 _IMPORT_RE = re.compile(r"^(\s*(?:from|import)\s+)langflow(?=[.\s])")
 
 
@@ -55,7 +79,7 @@ def _apply_map(src: str) -> str:
 def convert_file(path: Path, out_path: Path | None) -> int:
     src = path.read_text(encoding="utf-8")
     new, changed = convert_source(src)
-    new = _apply_map(new)
+    new = _special_fixes(_apply_map(new))
     if out_path:
         out_path.write_text(new, encoding="utf-8")
         print(f"written: {out_path}")
@@ -109,7 +133,7 @@ def convert_flow(path: Path, out_path: Path) -> int:
                 .get("code", {}).get("value"))
         if isinstance(code, str) and "langflow" in code:
             new, changed = convert_source(code)
-            new = _apply_map(new)
+            new = _special_fixes(_apply_map(new))
             if changed:
                 node["data"]["node"]["template"]["code"]["value"] = new
                 n += 1
