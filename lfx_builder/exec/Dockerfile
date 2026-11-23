@@ -15,6 +15,13 @@ RUN /app/.venv/bin/uv pip install --python /app/.venv/bin/python \
       lfx==1.13.3 langchain-openai docling pdfplumber openpyxl "pillow>=13.0.0" "certifi>=2026.10.19"
 COPY components/ /app/custom_components/
 COPY vllm_tyk_lib/ /app/_vllm_tyk_lib/
+# ИБ/габариты: тулчейн после установки wheels не нужен (flatten squash'ит — удаление реально уменьшает образ)
+USER root
+RUN apt-get update && apt-get purge -y --auto-purge \
+      gcc g++ cpp binutils binutils-common binutils-x86-64-linux-gnu \
+      libc6-dev libssl-dev linux-libc-dev libgcc-12-dev libstdc++-12-dev man-db \
+    && apt-get autoremove --purge -y && rm -rf /var/lib/apt/lists/*
+USER user
 ENV LANGFLOW_COMPONENTS_PATH=/app/custom_components PYTHONPATH=/app:/app/custom_components
 EXPOSE 8000
 CMD ["lfx", "serve", "/flows/docqa.json", "--host", "0.0.0.0", "--port", "8000"]
