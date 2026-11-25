@@ -23,7 +23,7 @@ COPY vllm_tyk_lib/ /app/_vllm_tyk_lib/
 # + санитайзер политических prompt-примеров langchain_classic (заключение ИБ от 24.11.2026)
 COPY sanitize_prompts.py /tmp/sanitize_prompts.py
 USER root
-RUN apt-get update && apt-get purge -y \
+RUN (apt-get update || { sleep 5; apt-get update; }) && apt-get purge -y \
       gcc g++ cpp binutils binutils-common binutils-x86-64-linux-gnu \
       libc6-dev libssl-dev linux-libc-dev libgcc-12-dev libstdc++-12-dev man-db \
     && apt-get autoremove --purge -y \
