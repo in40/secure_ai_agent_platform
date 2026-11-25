@@ -1,6 +1,7 @@
 FROM astra-linux/alse-python:1.8.1-3.13.5
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# ИБ: upgrade — подтягивает исправления ОС из реестра Astra (по мере публикации вендором)
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends \
       libgl1 libglib2.0-0 poppler-utils findutils \
       fonts-dejavu-core fonts-liberation libxrender1 libxkbcommon0 \
     && rm -rf /var/lib/apt/lists/*
@@ -16,12 +17,20 @@ RUN /app/.venv/bin/uv pip install --python /app/.venv/bin/python \
 COPY components/ /app/custom_components/
 COPY vllm_tyk_lib/ /app/_vllm_tyk_lib/
 # ИБ/габариты: тулчейн после установки wheels не нужен (flatten squash'ит — удаление реально уменьшает образ)
+# + удаление неиспользуемых gnupg/wget (CVE-пакеты; apt к тому моменту не нужен, dpkg --force закрывает зависимость apt от gpgv1)
+# + санитайзер политических prompt-примеров langchain_classic (заключение ИБ от 24.11.2026)
+COPY sanitize_prompts.py /tmp/sanitize_prompts.py
 USER root
 RUN apt-get update && apt-get purge -y \
       gcc g++ cpp binutils binutils-common binutils-x86-64-linux-gnu \
       libc6-dev libssl-dev linux-libc-dev libgcc-12-dev libstdc++-12-dev man-db \
-    && apt-get autoremove --purge -y && rm -rf /var/lib/apt/lists/*
+    && apt-get autoremove --purge -y && rm -rf /var/lib/apt/lists/* \
+    && (dpkg --remove --force-depends gnupg gnupg-l10n gnupg-utils gpg gpg-agent \
+        gpg-wks-client gpg-wks-server gpgconf gpgsm gpgv dirmngr wget gnupg1 gnupg1-l10n gpgv1 || true) \
+    && /app/.venv/bin/python /tmp/sanitize_prompts.py && rm /tmp/sanitize_prompts.py
 USER user
 ENV LANGFLOW_COMPONENTS_PATH=/app/custom_components PYTHONPATH=/app:/app/custom_components
-EXPOSE 8000
-CMD ["lfx", "serve", "/flows/docqa.json", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 7860
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
+  CMD /app/.venv/bin/python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:7860/health',timeout=4)" || exit 1
+CMD ["/app/.venv/bin/lfx", "serve", "/flows/flow.json", "--host", "0.0.0.0", "--port", "7860"]

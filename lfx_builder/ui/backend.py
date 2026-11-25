@@ -27,8 +27,8 @@ REPO = Path(os.environ.get("LFXB_REPO", "/home/sorokin/repos/secure_ai_agent_pla
 LF2LFX = REPO / "lfx_builder" / "lf2lfx.py"
 FLATTEN = REPO / "flatten.sh"
 GEN_CHANGES = REPO / "gen_changes.py"
-BASE_IMAGE = os.environ.get("LFXB_BASE", "astra-exec:0.1")
-BASE_SLIM = os.environ.get("LFXB_BASE_SLIM", "astra-exec-slim:0.1")
+BASE_IMAGE = os.environ.get("LFXB_BASE", "astra-exec:0.2")
+BASE_SLIM = os.environ.get("LFXB_BASE_SLIM", "astra-exec-slim:0.2")
 # типы/импорты, требующие тяжёлой базы (docling+torch)
 DOC_TYPES = {"DoclingInline", "ChunkDoclingDocument"}
 SMOKE_ENV = os.environ.get("LFXB_SMOKE_ENV", "/home/sorokin/lfx-builder/smoke.env")
@@ -145,7 +145,7 @@ def _smoke(job: Path, meta: dict, comps: list[dict], image: str) -> None:
     key = env["LANGFLOW_API_KEY"]
     try:
         _run(job, ["docker", "run", "-d", "--name", cname, "--network", "host", "--memory", "2g",
-                   "--env-file", SMOKE_ENV, image, "sh", "-c",
+                   "--no-healthcheck", "--env-file", SMOKE_ENV, image, "sh", "-c",
                    f"/app/.venv/bin/lfx serve /flows/flow.json --host 127.0.0.1 --port {port}"])
         base = f"http://127.0.0.1:{port}"
         ok = False
