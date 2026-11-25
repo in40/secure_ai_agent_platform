@@ -23,9 +23,7 @@ RUN apt-get update && apt-get purge -y \
       libc6-dev libssl-dev linux-libc-dev libgcc-12-dev libstdc++-12-dev \
       fonts-noto-core man-db \
     && apt-get autoremove --purge -y \
-    && (apt-get purge -y gnupg gnupg-l10n gnupg-utils gpg gpg-agent gpg-wks-client \
-          gpg-wks-server gpgconf gpgsm gpgv dirmngr wget || true) \
-    && (dpkg --purge --force-depends gnupg1 gnupg1-l10n gpgv1 || true) \
+    && (apt-get purge -y wget || true) \
     && rm -rf /var/lib/apt/lists/* \
     && /app/.venv/bin/python /tmp/sanitize_prompts.py && rm /tmp/sanitize_prompts.py
 USER user
