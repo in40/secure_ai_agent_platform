@@ -1,7 +1,9 @@
 FROM astra-linux/alse-python:1.8.1-3.13.5
 USER root
-# ИБ: upgrade — подтягивает исправления ОС из реестра Astra (по мере публикации вендором)
-RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
+# ИБ: база на frozen/1.8.4 — переключаемся на 1.8.7 (openssl 3.4.0-2-astra14, perl astra9,
+# util-linux astra16, glibc astra14, python3.11 astra20, expat astra5, brotli b4) и обновляем ОС
+RUN sed -i 's|frozen/1.8_x86-64/1.8.4|frozen/1.8_x86-64/1.8.7|g' /etc/apt/sources.list \
+    && apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
       libgl1 libglib2.0-0 poppler-utils findutils \
       fonts-dejavu-core fonts-liberation libxrender1 libxkbcommon0 \
     && rm -rf /var/lib/apt/lists/*
