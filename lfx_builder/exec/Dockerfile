@@ -1,7 +1,7 @@
 FROM astra-linux/alse-python:1.8.1-3.13.5
 USER root
 # ИБ: upgrade — подтягивает исправления ОС из реестра Astra (по мере публикации вендором)
-RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y --no-install-recommends \
       libgl1 libglib2.0-0 poppler-utils findutils \
       fonts-dejavu-core fonts-liberation libxrender1 libxkbcommon0 \
     && rm -rf /var/lib/apt/lists/*
