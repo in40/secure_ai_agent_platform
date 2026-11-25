@@ -28,7 +28,7 @@ RUN apt-get update && apt-get purge -y \
       libc6-dev libssl-dev linux-libc-dev libgcc-12-dev libstdc++-12-dev man-db \
     && apt-get autoremove --purge -y && rm -rf /var/lib/apt/lists/* \
     && (dpkg --remove --force-depends gnupg gnupg-l10n gnupg-utils gpg gpg-agent \
-        gpg-wks-client gpg-wks-server gpgconf gpgsm gpgv dirmngr wget gnupg1 gnupg1-l10n gpgv1 || true) \
+        gpg-wks-client gpg-wks-server gpgconf gpgsm gpgv dirmngr wget || true) \
     && /app/.venv/bin/python /tmp/sanitize_prompts.py && rm /tmp/sanitize_prompts.py
 USER user
 ENV LANGFLOW_COMPONENTS_PATH=/app/custom_components PYTHONPATH=/app:/app/custom_components
