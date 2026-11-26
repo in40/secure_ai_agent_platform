@@ -29,7 +29,7 @@ services:
     - LANGFLOW_CUSTOM_COMPONENT_ADMIN_ONLY=false
     - LANGFLOW_SKIP_MCP_AUTO_INIT=true
     - LANGFLOW_MCP_SERVER_ALLOWED_PACKAGES=
-    - LANGFLOW_MCP_SERVERS_LOCKED=true
+    - LANGFLOW_MCP_SERVERS_LOCKED=false
     - VERIAGENT_JUDGE_URL=https://chat.sorokinonline.com/v1/chat/completions
     - VERIAGENT_JUDGE_MODEL=qwen3.5-122b
     volumes:
