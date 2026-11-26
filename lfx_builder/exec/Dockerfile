@@ -22,8 +22,13 @@ COPY vllm_tyk_lib/ /app/_vllm_tyk_lib/
 # + удаление неиспользуемых gnupg/wget (CVE-пакеты; apt к тому моменту не нужен, dpkg --force закрывает зависимость apt от gpgv1)
 # + санитайзер политических prompt-примеров langchain_classic (заключение ИБ от 24.11.2026)
 COPY sanitize_prompts.py /tmp/sanitize_prompts.py
+COPY build_sqlite.py /tmp/build_sqlite.py
 USER root
-RUN (apt-get update || { sleep 5; apt-get update; }) && apt-get purge -y \
+# sqlite 3.54+ собираем сами (gcc ещё на месте): единственный пакет зачистки, который
+# нельзя удалить — _sqlite3 из venv линкуется на libsqlite3.so.0 (в Astra 1.8.7 только 3.40.1)
+RUN (apt-get update || { sleep 5; apt-get update; }) \
+    && /app/.venv/bin/python /tmp/build_sqlite.py && rm /tmp/build_sqlite.py \
+    && apt-get purge -y \
       gcc g++ cpp binutils binutils-common binutils-x86-64-linux-gnu \
       libc6-dev libssl-dev linux-libc-dev libgcc-12-dev libstdc++-12-dev man-db \
     && apt-get autoremove --purge -y \

@@ -4,6 +4,7 @@ set -e
 cd /tmp/astraexec
 cp /home/sorokin/repos/secure_ai_agent_platform/lfx_builder/exec/Dockerfile Dockerfile.full
 cp /home/sorokin/repos/secure_ai_agent_platform/lfx_builder/exec/Dockerfile.slim Dockerfile.slim
+cp /home/sorokin/repos/secure_ai_agent_platform/lfx_builder/exec/build_sqlite.py /home/sorokin/repos/secure_ai_agent_platform/lfx_builder/exec/sanitize_prompts.py /tmp/astraexec/
 docker build -f Dockerfile.slim -t pre-flat-slim5 . > /tmp/slimD.log 2>&1
 bash /home/sorokin/repos/secure_ai_agent_platform/flatten.sh pre-flat-slim5 astra-exec-slim:0.2 >> /tmp/slimD.log 2>&1
 docker build -f Dockerfile.full -t pre-flat-exec5 . >> /tmp/slimD.log 2>&1
