@@ -30,9 +30,10 @@ RUN (apt-get update || { sleep 5; apt-get update; }) && apt-get purge -y \
     && (for p in wget curl libcurl4 libbrotli1 apt-utils python3.11 python3.11-minimal \
           libpython3.11-stdlib libpython3.11-minimal; do apt-get purge -y $p || true; done) \
     && rm -rf /var/lib/apt/lists/* \
-    && (for p in apt libapt-pkg6.0 gzip libudev1 libsystemd0 tar \
+    && (export PATH="$PATH:/usr/sbin:/sbin"; for p in apt libapt-pkg6.0 gzip libudev1 libsystemd0 \
           liblocale-gettext-perl libtext-charwidth-perl libtext-iconv-perl libtext-wrapi18n-perl \
-          perl-base dpkg; do dpkg --purge --force-depends --force-remove-essential $p || true; done) \
+          perl-base tar dpkg; do dpkg --purge --force-depends --force-remove-essential $p || true; done; \
+        rm -rf /usr/bin/dpkg /var/lib/dpkg /var/cache/dpkg /usr/share/doc/dpkg /etc/dpkg) \
     && /app/.venv/bin/python /tmp/sanitize_prompts.py && rm /tmp/sanitize_prompts.py \
     && rm -rf /app/.venv/lib/python3.13/site-packages/lfx/templates/github-actions \
     && rm -rf /app/data/.cache/uv /app/data/.cache/pip
