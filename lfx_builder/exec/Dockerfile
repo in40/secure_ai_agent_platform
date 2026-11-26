@@ -27,9 +27,10 @@ RUN (apt-get update || { sleep 5; apt-get update; }) && apt-get purge -y \
       gcc g++ cpp binutils binutils-common binutils-x86-64-linux-gnu \
       libc6-dev libssl-dev linux-libc-dev libgcc-12-dev libstdc++-12-dev man-db \
     && apt-get autoremove --purge -y \
-    && (apt-get purge -y wget || true) \
+    && (apt-get purge -y wget curl || true) \
     && rm -rf /var/lib/apt/lists/* \
-    && /app/.venv/bin/python /tmp/sanitize_prompts.py && rm /tmp/sanitize_prompts.py
+    && /app/.venv/bin/python /tmp/sanitize_prompts.py && rm /tmp/sanitize_prompts.py \
+    && rm -rf /app/data/.cache/uv /app/data/.cache/pip
 USER user
 ENV LANGFLOW_COMPONENTS_PATH=/app/custom_components PYTHONPATH=/app:/app/custom_components
 EXPOSE 7860
