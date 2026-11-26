@@ -26,6 +26,7 @@ RUN (apt-get update || { sleep 5; apt-get update; }) && apt-get purge -y \
     && (apt-get purge -y wget curl || true) \
     && rm -rf /var/lib/apt/lists/* \
     && /app/.venv/bin/python /tmp/sanitize_prompts.py && rm /tmp/sanitize_prompts.py \
+    && rm -rf /app/.venv/lib/python3.13/site-packages/lfx/templates/github-actions \
     && rm -rf /app/data/.cache/uv /app/data/.cache/pip
 USER user
 ENV LANGFLOW_COMPONENTS_PATH=/app/custom_components PYTHONPATH=/app:/app/custom_components
