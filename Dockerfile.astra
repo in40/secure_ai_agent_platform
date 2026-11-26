@@ -68,6 +68,8 @@ COPY patched_chat.py /app/.venv/lib/python3.13/site-packages/lfx/components/inpu
 COPY patched_lfx_schemas.py /app/.venv/lib/python3.13/site-packages/lfx/utils/schemas.py
 COPY patched_langflow_schemas.py /app/.venv/lib/python3.13/site-packages/langflow/utils/schemas.py
 COPY patched_main.py /app/.venv/lib/python3.13/site-packages/langflow/main.py
+# Патч: authorized_legacy_flow_ids для attach-файлов в playground (см. patched_build.py)
+COPY patched_build.py /app/.venv/lib/python3.13/site-packages/langflow/api/build.py
 COPY simpleui/ /app/simpleui/
 
 # LFX-тулкит: remote достаёт его отсюда (docker cp) — git remote недоступен
