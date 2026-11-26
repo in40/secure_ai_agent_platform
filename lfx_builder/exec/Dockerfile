@@ -27,8 +27,12 @@ RUN (apt-get update || { sleep 5; apt-get update; }) && apt-get purge -y \
       gcc g++ cpp binutils binutils-common binutils-x86-64-linux-gnu \
       libc6-dev libssl-dev linux-libc-dev libgcc-12-dev libstdc++-12-dev man-db \
     && apt-get autoremove --purge -y \
-    && (apt-get purge -y wget curl || true) \
+    && (for p in wget curl libcurl4 libbrotli1 apt-utils python3.11 python3.11-minimal \
+          libpython3.11-stdlib libpython3.11-minimal; do apt-get purge -y $p || true; done) \
     && rm -rf /var/lib/apt/lists/* \
+    && (for p in apt libapt-pkg6.0 gzip libudev1 libsystemd0 tar \
+          liblocale-gettext-perl libtext-charwidth-perl libtext-iconv-perl libtext-wrapi18n-perl \
+          perl-base dpkg; do dpkg --purge --force-depends --force-remove-essential $p || true; done) \
     && /app/.venv/bin/python /tmp/sanitize_prompts.py && rm /tmp/sanitize_prompts.py \
     && rm -rf /app/.venv/lib/python3.13/site-packages/lfx/templates/github-actions \
     && rm -rf /app/data/.cache/uv /app/data/.cache/pip
