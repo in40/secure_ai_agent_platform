@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   langflow:
-    image: aso9864/langflow-v2:1.0.29-astra
+    image: aso9864/langflow-v2:1.0.29-astra9
     env_file:
     - secrets.env
     container_name: langflow-v2
